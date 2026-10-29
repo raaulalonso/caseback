@@ -1,0 +1,62 @@
+Caseback
+Copyright the Caseback contributors.
+
+Licences by folder (decision D51)
+---------------------------------
+Source-available: Functional Source License 1.1, ALv2 Future License (LICENSE-FSL). Anyone may read, run, modify and
+redistribute these files for any purpose except a Competing Use, which is making them available in a commercial
+product or service that does the same job as Caseback. Each version becomes Apache-2.0 two years after it is published.
+* hardware/
+* firmware/, except the three protocol files named below
+* apps/, except apps/ios/CasebackProtocol/
+
+Open source: Apache-2.0 (LICENSE-SOFTWARE). Everything not listed in this notice, and in particular:
+* caseback-protocol/ and its other implementations: apps/ios/CasebackProtocol/ and, in firmware/caseback-fw,
+  src/protocol.c, include/protocol.h and tests/test_protocol.c
+* algorithms/
+* tools/, tests/ and web/
+
+Open source: CC-BY-SA-4.0 (LICENSE-DOCS)
+* the Markdown documents at the root of the repository
+
+Before 28 October 2026
+----------------------
+Up to 27 October 2026 the repository was published with the hardware under CERN-OHL-S-2.0 (text in
+licenses/CERN-OHL-S-2.0.txt), the software under Apache-2.0 and the documents under CC-BY-SA-4.0. Anyone who has a copy
+of those versions may keep using it under the licence it came with. The Functional Source License applies to what is
+published from 28 October 2026 on.
+
+Third-party data used to train and validate the algorithms
+----------------------------------------------------------
+The packaged models (algorithms/ppg/caseback_ppg/models/scorer.json, algorithms/wellness/caseback_wellness/models/*.json)
+were fitted on the datasets below.
+The datasets are downloaded by the evaluation tools and are not redistributed in this repository. Each is used under
+its own licence; attribution is required.
+
+* BIDMC PPG and Respiration Dataset, PhysioNet, ODC-By 1.0.
+  Pimentel M.A.F. et al., "Toward a robust estimation of respiratory rate from pulse oximeters", IEEE Transactions on
+  Biomedical Engineering 64(8):1914-1923, 2017. Goldberger A.L. et al., PhysioBank, PhysioToolkit, and PhysioNet,
+  Circulation 101(23):e215-e220, 2000. https://physionet.org/content/bidmc/1.0.0/
+* IEEE Signal Processing Cup 2015 wrist PPG (TROIKA), Monash/Zenodo release, CC-BY-4.0.
+  Zhang Z., Pi Z., Liu B., IEEE Transactions on Biomedical Engineering 62(2):522-531, 2015.
+  https://zenodo.org/records/3902710 (the original competition terms have not been checked separately)
+* PPG-DaLiA, Zenodo, CC-BY-4.0. Reiss A. et al., "Deep PPG: large-scale heart rate estimation with convolutional
+  neural networks", Sensors 19(14):3079, 2019. https://zenodo.org/records/3902728
+* OxWalk, University of Oxford, CC-BY. Small et al., DOI 10.5287/bodleian:ORQ2abnbR.
+* Apple Watch motion and heart rate with polysomnography labels (Walch et al.), PhysioNet, ODC-By 1.0.
+  Walch O., Huang Y., Forger D., Goldstein C., "Sleep stage prediction with raw acceleration and photoplethysmography
+  heart rate data derived from a consumer wearable device", Sleep 42(12):zsz180, 2019.
+  https://physionet.org/content/sleep-accel/1.0.0/
+
+Third-party fonts bundled in the iOS app
+----------------------------------------
+* IBM Plex Mono (Light, Regular, Medium), SIL Open Font License 1.1, Copyright 2017 IBM Corp. with Reserved Font Name
+  "Plex". Files in apps/ios/Caseback/Resources/Fonts/ with the licence text (OFL-IBMPlexMono.txt).
+  Source: https://github.com/google/fonts/tree/main/ofl/ibmplexmono
+
+Trademark
+---------
+"Caseback" names this project. You may use the name to say that something is based on, compatible with or
+a fork of the project. Do not use it in a way that suggests a modified product, or a product sold by someone else, is
+the official one. The Functional Source License gives no right to the name either. This is a provisional policy
+(decisions D14 and D51) and not legal advice.

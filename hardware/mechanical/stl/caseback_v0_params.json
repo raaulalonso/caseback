@@ -1,0 +1,135 @@
+{
+  "disc_dia": 34.0,
+  "disc_h": 4.0,
+  "floor": 0.9,
+  "roof": 0.9,
+  "wall": 2.7,
+  "seam_z": 2.0,
+  "cavity_r": 14.3,
+  "cavity_z": [
+    0.9,
+    2.7
+  ],
+  "suction_dia": 22.0,
+  "suction_depth": 0.4,
+  "groove": {
+    "r0": 15.25,
+    "w": 0.8,
+    "depth": 0.6,
+    "cord_dia": 0.8
+  },
+  "window": {
+    "xy": [
+      0.0,
+      8.0
+    ],
+    "aperture_dia": 3.6,
+    "seat_dia": 4.4,
+    "seat_depth": 0.4
+  },
+  "screws": {
+    "xy": [
+      [
+        -9.5,
+        8.0
+      ],
+      [
+        9.5,
+        8.0
+      ]
+    ],
+    "hole_r": 0.6,
+    "cbore_r": 1.1,
+    "cbore_depth": 0.8
+  },
+  "pads": {
+    "xy": [
+      [
+        -4.0,
+        -12.6
+      ],
+      [
+        4.0,
+        -12.6
+      ]
+    ],
+    "size": [
+      2.4,
+      1.2
+    ]
+  },
+  "notch": {
+    "width": 3.0,
+    "depth": 0.9,
+    "height": 1.0,
+    "angle_deg": -90
+  },
+  "cell": {
+    "name": "THIN_1P5",
+    "t_w_l": [
+      1.5,
+      10.0,
+      20.0
+    ],
+    "required_h": 3.9499999999999997
+  },
+  "cells": {
+    "THIN_1P5": [
+      1.5,
+      10.0,
+      20.0
+    ],
+    "301020": [
+      3.0,
+      10.0,
+      20.0
+    ],
+    "401230": [
+      4.0,
+      12.0,
+      30.0
+    ]
+  },
+  "foam": 0.15,
+  "slack": 0.1,
+  "pocket_clr": 0.3,
+  "pocket": {
+    "center": [
+      0.0,
+      -2.4
+    ],
+    "size": [
+      20.3,
+      10.3,
+      1.75
+    ],
+    "z0": 0.9
+  },
+  "puck": {
+    "dia": 38.0,
+    "h": 8.0,
+    "dish_dia": 34.6,
+    "dish_depth": 1.6,
+    "key": {
+      "width": 2.2,
+      "height": 0.8,
+      "inner_r": 16.5
+    },
+    "pogo_xy": [
+      [
+        -4.0,
+        -12.6
+      ],
+      [
+        4.0,
+        -12.6
+      ]
+    ]
+  },
+  "stl": {
+    "bottom": "caseback_v0_bottom.stl",
+    "top": "caseback_v0_top.stl",
+    "puck": "caseback_v0_puck.stl",
+    "band": "caseback_v0_band.stl"
+  }
+}

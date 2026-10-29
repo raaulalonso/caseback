@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "caseback-protocol"
+version = "0.2.0"
+description = "Caseback BLE application protocol reference implementation"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["caseback_protocol*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

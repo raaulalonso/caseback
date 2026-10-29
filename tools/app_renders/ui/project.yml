@@ -1,0 +1,41 @@
+# A tiny project whose only job is to drive the iOS Simulator's own Home Screen (XCUITest on SpringBoard) for the pictures of the
+# website's "The app" section: it sets the wallpaper and puts the app's widgets on the Home Screen, as a person would.
+# Generate and run with tools/app_renders/home_screen.sh; the .xcodeproj it makes is not kept.
+name: Driver
+options:
+  bundleIdPrefix: io.caseback.shots
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  Driver:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.caseback.shots.driver
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Driver
+        CODE_SIGN_IDENTITY: "-"
+  DriverUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Driver
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.caseback.shots.driver.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+schemes:
+  Driver:
+    build:
+      targets:
+        Driver: all
+    test:
+      targets:
+        - DriverUITests

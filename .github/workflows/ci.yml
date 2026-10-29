@@ -1,0 +1,117 @@
+name: ci
+
+on:
+  push:
+    paths:
+      - "caseback-protocol/**"
+      - "apps/ios/CasebackProtocol/**"
+      - "firmware/caseback-fw/**"
+      - "algorithms/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "caseback-protocol/**"
+      - "apps/ios/CasebackProtocol/**"
+      - "firmware/caseback-fw/**"
+      - "algorithms/**"
+      - ".github/workflows/ci.yml"
+
+jobs:
+  fixtures-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift fixtures match canonical golden bytes
+        run: diff -r caseback-protocol/fixtures/golden apps/ios/CasebackProtocol/Tests/CasebackProtocolTests/Fixtures/golden
+
+  protocol-python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: caseback-protocol/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+      - name: Test
+        run: pytest -v
+      - name: Golden fixtures are reproducible (no changed, deleted or untracked files)
+        run: |
+          python tools/gen_fixtures.py
+          swift_fixtures=../../apps/ios/CasebackProtocol/Tests/CasebackProtocolTests/Fixtures
+          status="$(git status --porcelain -- ../fixtures "$swift_fixtures")"
+          if [ -n "$status" ]; then
+            echo "fixtures are out of date or untracked; run python tools/gen_fixtures.py and commit:"
+            echo "$status"
+            exit 1
+          fi
+
+  protocol-swift:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: apps/ios/CasebackProtocol
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: swift test
+
+  firmware-protocol-c:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware/caseback-fw
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run host test
+        run: |
+          cc -std=c99 -pedantic -Wall -Wextra -Werror -Iinclude -o /tmp/test_protocol tests/test_protocol.c src/protocol.c
+          /tmp/test_protocol ../../caseback-protocol/fixtures/golden
+      - name: Build and run host test with AddressSanitizer and UBSan
+        run: |
+          cc -Wall -Wextra -Werror -Iinclude -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/test_protocol_san tests/test_protocol.c src/protocol.c
+          /tmp/test_protocol_san ../../caseback-protocol/fixtures/golden
+      - name: Build and run the device-logic host test with AddressSanitizer and UBSan
+        run: |
+          cc -std=c99 -pedantic -Wall -Wextra -Werror -Iinclude -fsanitize=address,undefined -fno-sanitize-recover=all -o /tmp/test_device tests/test_device.c src/device.c src/protocol.c
+          /tmp/test_device
+
+  algorithms-ppg:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: algorithms/ppg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -e ".[dev]"
+      - name: Test (public-dataset tests skip when data is not cached)
+        run: pytest -v
+
+  algorithms-wellness:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: algorithms/wellness
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -e ../ppg
+          pip install -e ".[dev]"
+      - name: Test
+        run: pytest -v

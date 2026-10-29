@@ -1,0 +1,5 @@
+This Swift package implements the Caseback protocol and is licensed under the Apache License 2.0. The full text is in
+LICENSE-SOFTWARE at the root of the repository:
+https://github.com/raaulalonso/caseback/blob/main/LICENSE-SOFTWARE
+
+The rest of apps/ is under the Functional Source License (apps/LICENSE).

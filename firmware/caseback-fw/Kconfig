@@ -1,0 +1,21 @@
+mainmenu "Caseback firmware"
+
+config CASEBACK_REQUIRE_ENCRYPTION
+	bool "Require an encrypted link to read the INFO characteristic"
+	default y
+	help
+	  INFO carries the device id, so decision D5 wants it readable only
+	  after pairing. The bring-up prj.conf sets this to n so that nRF
+	  Connect can read it before bonding.
+
+config CASEBACK_HW_REV
+	int "hw_rev reported in INFO_RESPONSE (major << 8 | minor)"
+	default 1
+	range 0 65535
+
+config CASEBACK_FW_REV
+	int "fw_rev reported in INFO_RESPONSE (major << 8 | minor)"
+	default 1
+	range 0 65535
+
+source "Kconfig.zephyr"

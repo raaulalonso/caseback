@@ -1,0 +1,57 @@
+/* nRF52840 DK bring-up wiring. Board labels/nexus come from the Zephyr
+ * nrf52840dk devicetree (arduino_i2c, arduino_spi, arduino_header) and were
+ * NOT checked against a real tree: no toolchain here. Assumed Zephyr 4.x.
+ *
+ * - BMI270 on I2C: arduino_i2c (P0.26 SDA / P0.27 SCL), address 0x68.
+ * - MAX86140/41 on SPI (it has no I2C): arduino_spi, CS on Arduino D10,
+ *   INT on Arduino D9. Arduino header indices: A0-A5 = 0-5, D0-D7 = 6-13,
+ *   D8-D15 = 14-19, so D10 = 16 and D9 = 15.
+ *   Resulting nRF pins (verify against the DK user guide):
+ *     SCK D13 = P1.15, MISO D12 = P1.14, MOSI D11 = P1.13,
+ *     CS D10 = P1.12, INT D9 = P1.11.
+ * - The AFE core is 1.8 V and its SDO is a 1.8 V output: on a 3.3 V DK, SDO
+ *   needs a level shifter or an AFE board that has one. INT is open drain
+ *   (abs. max 6 V per the datasheet) and pulled up to the DK VDD below.
+ * - P0.08 is the DK UART RXD (VCOM) and is no longer used for the AFE.
+ */
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
+
+/ {
+	aliases {
+		led0 = &led0;
+	};
+
+	zephyr,user {
+		afe-int-gpios = <&arduino_header 15 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D9 */
+	};
+};
+
+&arduino_i2c {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+};
+
+&arduino_spi {
+	status = "okay";
+	cs-gpios = <&arduino_header 16 GPIO_ACTIVE_LOW>; /* D10 */
+
+	/* No compatible: there is no upstream driver, main.c talks raw SPI.
+	 * 1 MHz (datasheet max 8 MHz); mode 0 assumed from the timing text.
+	 */
+	max86140: max86140@0 {
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+	};
+};
+
+/* DC/DC on REG1 (the DK has the inductors; a custom board needs them too).
+ * REG0 only matters when the SoC is fed from VDDH, not the case here.
+ */
+&reg1 {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+&reg0 {
+	status = "okay";
+};

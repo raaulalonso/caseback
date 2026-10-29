@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "caseback-ppg"
+version = "0.1.0"
+description = "Caseback PPG algorithms: beat detection, heart rate and HRV"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = ["numpy>=1.26", "scipy>=1.11", "certifi"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "scikit-learn>=1.4", "joblib"]   # scikit-learn: parity tests of the exported trees
+train = ["scikit-learn>=1.4", "joblib"]      # only to fit models; inference is plain NumPy
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["caseback_ppg*"]
+
+[tool.setuptools.package-data]
+caseback_ppg = ["models/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["dataset: needs a downloaded public dataset (skipped when absent)"]

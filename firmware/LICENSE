@@ -1,0 +1,11 @@
+The files in this folder are licensed under the Functional Source License, Version 1.1, ALv2 Future License
+(FSL-1.1-ALv2). The full text is in LICENSE-FSL at the root of the repository:
+https://github.com/raaulalonso/caseback/blob/main/LICENSE-FSL
+
+Anyone may use, copy, modify and redistribute them for any purpose except a Competing Use, as defined in that text.
+Each version becomes available under the Apache License 2.0 two years after it is published.
+
+Copies published before 28 October 2026 keep the licence they were published with (Apache-2.0, text in LICENSE-SOFTWARE). See NOTICE.
+
+Exception: caseback-fw/src/protocol.c, caseback-fw/include/protocol.h and caseback-fw/tests/test_protocol.c implement the
+Caseback protocol and stay under Apache-2.0 (LICENSE-SOFTWARE), like the other implementations of the protocol.

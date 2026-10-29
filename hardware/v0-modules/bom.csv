@@ -1,0 +1,18 @@
+module,ref,mfr_pn,vendor,qty,unit_est_usd,notes
+MCU_DK,U1,nRF52840-DK/PCA10056,Nordic/DigiKey,1,40.00,Bring-up only
+MCU_MODULE,U1b,MDBT50Q-1MV2,Raytac/DigiKey,2,8.00,BLE 5 module chip antenna
+PPG_EVAL,U2,MAX86140EVSYS,Analog Devices,1,75.00,HR HRV SpO2 AFE eval (USB eval system; confirm SPI access from the DK)
+PPG_BRK,U2c,MAX30101 breakout,SparkFun/Pimoroni,1,,Green+red+IR LED I2C 0x57; price TBD (not in the $261 total)
+PPG_AFE,U2b,MAX86140,Maxim/DigiKey,2,6.00,SPI only 1.8 V; WLP 2.05x1.85 mm 0.4 mm pitch: not hand-solderable
+IMU_BRK,U3,SEN-22397 BMI270 Qwiic,SparkFun,1,15.00,Bring-up
+IMU,U3b,BMI270,Bosch/Mouser,5,3.00,Production IMU (accel-only; gyro off)
+TEMP,U4,NCP15XH103 10k NTC 0402,Murata/DigiKey,5,0.20,Skin temp
+BATT,BT1,LiPo 3V7 50-100mAh +PCM (301020 = 3.0x10x20 mm; 401230 = 4.0x12x30 mm; confirm on datasheet),Adafruit/EEMB,2,6.00,3d target; 4.0 mm shell holds only a 1.5 mm cell (see mechanical-review)
+CHARGE,U5,MCP73831T-2ACI/OT,Microchip/DigiKey,5,1.00,CC/CV LiPo 4.2V; set R_PROG <=1C
+LDO,U6,AP2112K-3.3TRG1,Diodes/DigiKey,5,0.50,3V3 rail (bring-up jig only; 55uA Iq)
+POGO,J1,2-pin pogo pads (non-magnetic),AliExpress/Adafruit,5,2.00,Charge puck (magnet on puck only)
+BATT_CONN,J2,JST-PH 2.0 2-pin,Adafruit,5,0.50,Battery
+MICSUCTION,M1,microsuction pad sheet (3M 300LSE is an adhesive tape: confirm),3M/Amazon,1,15.00,Caseback mount
+FILAMENT,M2,TPU 95A or PETG,Prusa/Bambu,1,25.00,Disc + softband
+SOFTBAND,M3,20/22mm TPU strap blank,AliExpress,2,5.00,Night/workout band
+JIG,M4,Steel caseback dummy Ø28-34,eBay/spare,1,5.00,Fit jig
