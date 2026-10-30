@@ -13,20 +13,16 @@
 // drawn once into an environment map, there are no shadow maps and no post-processing, and at rest it draws only when
 // something moves.
 import * as THREE from "three";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { Section } from "@/lib/i18n";
+import { DEG, GLASS, createRenderer, disposeScene, loadModel, pixelRatio, precompile, prepare, s0, spring, track, type Spring } from "../three/core";
 import { CANVAS, R_CASE, U_MM, VIEW } from "./geometry";
 import { B, easeInOut, easeOut, introAt } from "./timeline";
 
-const DEG = Math.PI / 180;
 const R = 12.5; // disc radius, mm
 const H = 3.1; // thickness with the pad
 const FOV = 20;
 /** Camera distance that puts U_MM drawing units in a millimetre on the plane through the middle of the disc. */
 const DIST = (VIEW * CANVAS) / U_MM / Math.tan((FOV / 2) * DEG);
-/** Most device pixels the canvas may have; above this the pixel ratio comes down. */
-const MAX_PIXELS = 2.4e6;
 
 /** How far each part stands from its seat in the exploded view (mm, towards the watch), and its step when they close. */
 const STACK: Record<string, { lift: number; step: number }> = {
@@ -43,7 +39,6 @@ const PARTS = Object.keys(STACK).length;
 const PAD_OFF = 8;
 /** Parts that go see-through when the antenna is shown: everything between the skin face and the board. */
 const XRAY = ["shell", "window", "contacts"];
-const GLASS = /window_clear_resin|optical_gel|optical_silicone_clear/;
 
 /**
  * Pose of the disc: yaw about the vertical and tilt about the horizontal, in degrees, and scale. Tilt -180 shows the skin
@@ -95,20 +90,7 @@ const ANCHORS: Record<Section, AnchorDef> = {
 const LUME = new THREE.Color("#eef24b");
 const GREEN = new THREE.Color("#3ddc84");
 
-/** The baked occlusion (red channel of the vertex colour) darkens the light from the studio, as an aoMap would. */
-const AO_GLSL = /* glsl */ `
-  float ambientOcclusion = mix(1.0, vColor.r, 0.9);
-  reflectedLight.indirectDiffuse *= ambientOcclusion;
-  reflectedLight.directDiffuse *= mix(1.0, ambientOcclusion, 0.6);
-  #if defined( USE_ENVMAP ) && defined( STANDARD )
-    float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
-    reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
-  #endif
-`;
-
 type Part = { node: THREE.Object3D; mats: THREE.MeshStandardMaterial[] };
-/** A value that follows its target on a critically damped spring: it sets off and arrives with no jerk and no overshoot. */
-type Spring = { x: number; v: number };
 
 export class Disc3D {
   private renderer: THREE.WebGLRenderer;
@@ -131,32 +113,11 @@ export class Disc3D {
   private antenna: THREE.MeshStandardMaterial[] = [];
   private dirty = true;
   private wasRest = false;
+  private size = "";
   private v = new THREE.Vector3();
 
   private constructor(canvas: HTMLCanvasElement, model: THREE.Object3D) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
-    this.renderer.setClearColor(0x000000, 0);
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    const room = studio();
-    this.env = pmrem.fromScene(room, 0.02).texture;
-    pmrem.dispose();
-    room.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        o.geometry.dispose();
-        o.material.dispose();
-      }
-    });
-    this.scene.environment = this.env;
-
-    // Two lights that stay put while the disc turns: a soft key from the upper left for the shading of the faces, and a
-    // rim from behind on the right that keeps the outline of the black shell on the black page.
-    const key = new THREE.DirectionalLight(0xffffff, 0.5);
-    key.position.set(-4, 6, 7);
-    const back = new THREE.DirectionalLight(0xffffff, 1.6);
-    back.position.set(6, 4, -6);
-    this.scene.add(key, back);
+    ({ renderer: this.renderer, env: this.env } = createRenderer(canvas, this.scene));
 
     this.camera.position.set(0, 0, DIST);
     this.camera.lookAt(0, 0, 0);
@@ -172,19 +133,7 @@ export class Disc3D {
       node.traverse((o) => {
         if (!(o instanceof THREE.Mesh)) return;
         const list = (Array.isArray(o.material) ? o.material : [o.material]).map((m: THREE.MeshStandardMaterial) => {
-          const c = m.clone();
-          tune(c);
-          c.userData.opacity = c.opacity;
-          c.transparent = true;
-          if (o.geometry.hasAttribute("color")) {
-            c.vertexColors = true;
-            c.onBeforeCompile = (sh) => {
-              sh.fragmentShader = sh.fragmentShader
-                .replace("#include <color_fragment>", "")
-                .replace("#include <aomap_fragment>", AO_GLSL);
-            };
-            c.customProgramCacheKey = () => "baked-ao";
-          }
+          const c = prepare(m, o.geometry.hasAttribute("color"));
           mats.push(c);
           if (/^led_(green|red|IR)$/.test(c.name)) this.leds.push(c);
           if (GLASS.test(c.name) && name === "window") this.glass.push(c);
@@ -212,11 +161,25 @@ export class Disc3D {
     }
   }
 
-  static async load(canvas: HTMLCanvasElement, url: string) {
-    const loader = new GLTFLoader();
-    loader.setMeshoptDecoder(MeshoptDecoder);
-    const gltf = await loader.loadAsync(url);
-    return new Disc3D(canvas, gltf.scene);
+  /** `most`: the pixel ratio to start at (see resize). The disc is drawn once at the canvas's size before it is returned. */
+  static async load(canvas: HTMLCanvasElement, most = 2) {
+    const gltf = await loadModel("disc");
+    const disc = new Disc3D(canvas, gltf.scene.clone(true));
+    const r = canvas.getBoundingClientRect();
+    if (r.width > 0) disc.resize(r.width, r.height, most);
+    await disc.warm();
+    return disc;
+  }
+
+  /**
+   * Everything the first frames would otherwise stop for, done before the disc is handed over: the programs are compiled
+   * (in parallel where the browser can) and the exploded view is drawn once, unseen, so every part's buffers are on the
+   * GPU. Without it the turn stalls on its first frames, on a phone for a good part of a second.
+   */
+  private async warm() {
+    await precompile(this.renderer, this.scene, this.camera);
+    this.frame(B.open + B.openDur, 0, true);
+    this.dirty = true;
   }
 
   setHover(section: Section | null) {
@@ -236,8 +199,13 @@ export class Disc3D {
     this.dirty = true;
   }
 
-  resize(width: number, height: number) {
-    const ratio = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(MAX_PIXELS / (width * height)));
+  /** `most`: the highest pixel ratio to draw at (a phone draws the intro at less, and the disc at rest sharp). */
+  resize(width: number, height: number, most = 2) {
+    // setting a canvas to the size it has still clears and reallocates it, so an unchanged size is left alone
+    const ratio = pixelRatio(width, height, most);
+    const key = `${width}x${height}@${ratio}`;
+    if (key === this.size) return;
+    this.size = key;
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
@@ -334,115 +302,12 @@ export class Disc3D {
   }
 
   dispose() {
-    this.scene.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        o.geometry.dispose();
-        (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
-      }
-    });
-    this.env.dispose();
-    this.renderer.dispose();
+    disposeScene(this.scene, this.env, this.renderer);
   }
+
 }
 
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
 const q1 = new THREE.Quaternion();
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-const s0 = (): Spring => ({ x: 0, v: 0 });
-
-/** Exact step of a critically damped spring of angular frequency `w` (it settles in about 5 / w seconds). */
-function spring(s: Spring, to: number, dt: number, w: number) {
-  const d = s.x - to;
-  const e = Math.exp(-w * dt);
-  const c = s.v + w * d;
-  const x = (d + c * dt) * e;
-  const v = (s.v - c * w * dt) * e;
-  if (Math.abs(x) < 1e-4 && Math.abs(v) < 1e-3) Object.assign(s, { x: to, v: 0 });
-  else Object.assign(s, { x: to + x, v });
-}
-
-/**
- * A value through timed keys on a monotone cubic (Fritsch–Butland tangents): it passes every key without overshooting,
- * keeps its speed through the keys between, and starts and ends at rest.
- */
-function track(keys: [number, number][]) {
-  const n = keys.length;
-  const m = keys.map((_, i) => {
-    if (i === 0 || i === n - 1) return 0;
-    const [t0, v0] = keys[i - 1];
-    const [t1, v1] = keys[i];
-    const [t2, v2] = keys[i + 1];
-    const h0 = t1 - t0;
-    const h1 = t2 - t1;
-    const d0 = (v1 - v0) / h0;
-    const d1 = (v2 - v1) / h1;
-    if (d0 * d1 <= 0) return 0;
-    return (3 * (h0 + h1)) / ((2 * h1 + h0) / d0 + (h1 + 2 * h0) / d1);
-  });
-  return (t: number) => {
-    if (t <= keys[0][0]) return keys[0][1];
-    if (t >= keys[n - 1][0]) return keys[n - 1][1];
-    let i = 0;
-    while (t > keys[i + 1][0]) i++;
-    const [t0, v0] = keys[i];
-    const [t1, v1] = keys[i + 1];
-    const h = t1 - t0;
-    const s = (t - t0) / h;
-    const s2 = s * s;
-    const s3 = s2 * s;
-    return (2 * s3 - 3 * s2 + 1) * v0 + (s3 - 2 * s2 + s) * h * m[i] + (-2 * s3 + 3 * s2) * v1 + (s3 - s2) * h * m[i + 1];
-  };
-}
-
-/**
- * The studio the reflections come from, after the one of the app's watch (tools/watch3d/build_watch.py): a big soft box
- * above and to the left, a strip on the right and one behind and above for the far edge, a soft fill and a ring light
- * round the camera, in a dark room with a darker floor. The faces of the disc pick up the edge of the soft box as a
- * gradient; the rounded rim picks up the ring as a thin bright circle, so the disc comes round with the line of the watch
- * case still on it.
- */
-function studio() {
-  const room = new THREE.Scene();
-  const shell = new THREE.Mesh(
-    new THREE.SphereGeometry(20, 32, 16),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      vertexShader: "varying vec3 d; void main() { d = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-      fragmentShader:
-        "varying vec3 d; void main() { float s = 0.004 + 0.03 * pow(clamp(d.y * 0.5 + 0.5, 0.0, 1.0), 2.0); gl_FragColor = vec4(vec3(d.y < -0.05 ? s * 0.3 : s), 1.0); }",
-    }),
-  );
-  room.add(shell);
-  const box = (dir: [number, number, number], w: number, h: number, power: number) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(power), side: THREE.DoubleSide }));
-    m.position.set(...dir).normalize().multiplyScalar(12);
-    m.lookAt(0, 0, 0);
-    room.add(m);
-  };
-  box([-0.6, 0.75, 0.45], 10, 7, 5); // key
-  box([0.95, 0.15, 0.3], 1.6, 12, 4); // strip on the right
-  box([0.1, 0.55, -0.85], 14, 1.2, 6); // strip behind and above
-  box([0.1, -0.3, 1], 14, 5, 0.8); // soft fill from the front, low
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(7.5, 0.35, 12, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(3) }));
-  ring.position.set(0, 0, 11); // round the camera, about 34 degrees off its axis
-  room.add(ring);
-  return room;
-}
-
-/** The Blender materials are made for Cycles; a few need their web equivalent. */
-function tune(m: THREE.MeshStandardMaterial) {
-  if (m.name.startsWith("PEEK")) m.roughness = 0.42; // bead-blasted black PEEK: dark, with a satin sheen
-  if (m.name === "silicone_pad") m.color.multiplyScalar(0.6);
-  // No transmission pass (it would draw the scene twice a frame): what Cycles sees through is drawn see-through instead.
-  const p = m as THREE.MeshPhysicalMaterial;
-  if (p.transmission > 0) {
-    m.opacity = 1 - 0.6 * p.transmission;
-    p.transmission = 0;
-  }
-  if (GLASS.test(m.name)) {
-    m.color.setScalar(0.04);
-    m.opacity = 0.35;
-    m.roughness = 0.05;
-  }
-}

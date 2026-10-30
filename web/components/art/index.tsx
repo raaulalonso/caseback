@@ -1,4 +1,4 @@
-// The drawing of each plate. Every section but the first is drawn now; "How it's worn" still shows its text.
+// The drawing of each plate. "How it's worn" is 3D (wear/WearArt.tsx); the others are drawn in SVG.
 import type { ReactNode } from "react";
 import type { Dict, Locale, Section } from "@/lib/i18n";
 import { SenseArt } from "./measure/Sense";
@@ -8,8 +8,16 @@ import { PhoneFigure } from "./app/Phones";
 import { MapArt } from "./open/Map";
 import { TermsArt } from "./open/Terms";
 import { VerifyArt } from "./open/Verify";
+import { WearArt } from "./wear/WearArt";
+import type { WearKind } from "./wear/scenes";
+
+const WEAR: WearKind[] = ["caseback", "charge", "band"];
 
 export function plateArt(section: Section, index: number, t: Dict, lang: Locale): ReactNode {
+  if (section === "wear") {
+    const a = t.wear.plates[index]?.art;
+    return a ? <WearArt kind={WEAR[index]} labels={a.labels} label={a.label} caption={a.caption} /> : null;
+  }
   if (section === "measure") {
     const a = t.measure.art;
     return [<SenseArt key="s" t={a.sense} />, <SignalsArt key="g" t={a.signals} />][index] ?? null;

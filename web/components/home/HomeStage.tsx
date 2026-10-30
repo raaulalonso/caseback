@@ -11,8 +11,16 @@ import { B, T, at, introAt } from "./timeline";
 
 const SEEN_KEY = "caseback-intro-seen";
 const MODEL = "/models/disc.glb";
+/**
+ * How long the page stays dark waiting for the disc before the watch starts to draw anyway. Loading three.js and the model,
+ * compiling and the first upload stop the page's thread for a while (more than a second on a slow phone), and the watch's
+ * drawing would stutter through it; so the intro starts once the disc is ready, or after this if the network is slow.
+ */
+const PRELOAD = 3;
 /** How long the drawn watch waits for the disc model before the sections come in without it. */
 const WAIT = 8;
+/** Highest pixel ratio of the 3D canvas while a phone plays the intro; at rest it draws at 2. */
+const INTRO_RATIO = 1.5;
 const BOX = `${-VIEW} ${-VIEW} ${2 * VIEW} ${2 * VIEW}`;
 
 type Run = "pending" | "intro" | "build" | "done";
@@ -79,6 +87,7 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
     const finish = (skipped = false) => {
       settled = true;
       fade ||= skipped;
+      fit(); // full resolution at rest
       setRun("done");
       try {
         sessionStorage.setItem(SEEN_KEY, "1");
@@ -86,16 +95,18 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
     };
     if (settled) setRun("done");
 
-    // The disc model loads while the watch draws itself; the watch turns over once it is there.
+    // The disc model loads (and is compiled and drawn once) before the watch starts to draw, as long as that takes less than
+    // PRELOAD; if it takes longer the watch draws anyway and turns over once the disc is there.
     let disc: Disc3D | null = null;
     let failed = false;
     let disposed = false;
+    const mounted = performance.now();
     const fit = () => {
       const r = canvas.getBoundingClientRect();
-      if (disc && r.width > 0) disc.resize(r.width, r.height);
+      if (disc && r.width > 0) disc.resize(r.width, r.height, compact && !settled ? INTRO_RATIO : 2);
     };
     import("./disc3d")
-      .then((m) => m.Disc3D.load(canvas, MODEL))
+      .then((m) => m.Disc3D.load(canvas, compact && !settled ? INTRO_RATIO : 2))
       .then((d) => {
         if (disposed) return d.dispose();
         disc = discRef.current = d;
@@ -135,6 +146,11 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
 
     const frame = (nowMs: number) => {
       if (!start) {
+        // the watch waits in the dark until the disc is ready to turn (see PRELOAD)
+        if (!settled && !disc && !failed && nowMs - mounted < PRELOAD * 1000) {
+          raf = requestAnimationFrame(frame);
+          return;
+        }
         start = last = nowMs;
         if (!settled) setRun("intro");
       }
@@ -237,6 +253,8 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
       data-hover={hover === null ? undefined : CALLOUTS[hover].key}
       data-leaving={leaving ? "" : undefined}
     >
+      {/* the model starts to download with the page, not once three.js has loaded (React puts the link in the head) */}
+      <link rel="preload" href={MODEL} as="fetch" crossOrigin="anonymous" />
       <div className="seal">
         <div className="card a-flip" style={at(B.turn, B.turnDur)}>
           <svg className="face face-front" viewBox={BOX} data-w={2 * VIEW} aria-hidden>
@@ -295,7 +313,7 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
         <figcaption>{t.home.side.title}</figcaption>
       </figure>
 
-      {run !== "done" && (
+      {(run === "intro" || run === "build") && (
         <button type="button" className="skip" onClick={() => skipRef.current()}>
           {t.nav.skip}
         </button>

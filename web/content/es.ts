@@ -46,18 +46,53 @@ export const es: typeof en = {
       {
         title: "Debajo de la tapa",
         body: [
-          "El disco queda entre la tapa del reloj y la muñeca. Lo sujeta una almohadilla de microsucción, así que no hay pegamento en el reloj ni imanes cerca del movimiento.",
-          "Por fuera el reloj se ve igual. El disco está pensado para medir 25 mm de diámetro y 3,1 mm de grosor.",
+          "El disco va en la tapa trasera del reloj, entre el reloj y la muñeca. Toda la cara que toca la tapa es una almohadilla de microsucción: está pensado para sujetarse sin pegamento y sin imanes cerca del movimiento, y para quitarse y volver a ponerse.",
+          "Está diseñado con 25 mm de diámetro y 3,1 mm de grosor, y el borde del lado de la piel redondeado. Por fuera, el reloj se ve igual.",
         ],
-        art: { case: "Caja del reloj", disc: "Disco", pad: "Almohadilla", skin: "Muñeca", thick: "3,1 mm" },
+        art: {
+          label: "Dibujo de la parte de atrás de un reloj. El disco, en 3D, sube hasta la tapa y se queda en ella.",
+          caption: "El disco es el modelo 3D del diseño actual; el reloj está dibujado.",
+          labels: [
+            { key: "caseback", name: "Tapa del reloj" },
+            { key: "pad", name: "Almohadilla de microsucción", value: "Ø 23 mm" },
+            { key: "disc", name: "Disco", value: "Ø 25 mm" },
+            { key: "thick", name: "Grosor", value: "3,1 mm" },
+          ],
+        },
       },
       {
-        title: "La carga y la banda",
+        title: "Se carga en el reloj",
         body: [
-          "Para cargarlo, el reloj se apoya con la esfera hacia arriba en una base redonda y pequeña, con el disco todavía pegado detrás. Dos contactos de la cara del disco que toca la piel tocan dos pines con muelle de la base.",
-          "Sin reloj, una banda de tela sujeta el disco contra la muñeca para dormir o entrenar.",
+          "Para cargarlo no hace falta quitarlo: el reloj se deja con la esfera hacia arriba sobre la base de carga y el disco encaja en ella. Un gancho y un pestillo con muelle entran en dos huecos del borde del disco y lo aprietan contra dos pines con muelle, que tocan los dos contactos de acero de la cara de la piel.",
+          "Para sacarlo se pulsa el botón del borde de la base. La base se conecta por USB-C y no lleva imanes. El mismo encaje vale con el disco solo o en la banda.",
         ],
-        art: { puck: "Base de carga", band: "Banda de tela" },
+        art: {
+          label: "Dibujo de un reloj con la esfera hacia arriba que baja sobre la base de carga, también dibujada, hasta que el disco de su tapa, en 3D, encaja en ella.",
+          caption: "El disco es el modelo 3D del diseño actual; el reloj y la base están dibujados.",
+          labels: [
+            { key: "watch", name: "Reloj, esfera arriba" },
+            { key: "disc", name: "Disco, encajado" },
+            { key: "button", name: "Botón para soltarlo" },
+            { key: "charger", name: "Base de carga", value: "Ø 34 mm" },
+          ],
+        },
+      },
+      {
+        title: "Sin reloj, en la banda",
+        body: [
+          "Para dormir o entrenar sin reloj, el disco entra en una banda: una correa tejida que sale de un soporte de silicona, da una vuelta a la muñeca, pasa por una hebilla de acero y se cierra sobre sí misma con un cierre de gancho y lazo.",
+          "El disco entra en el soporte por el lado de la piel y su cara queda fuera, así que se carga sin sacarlo de la banda: la base encaja igual.",
+        ],
+        art: {
+          label: "Dibujo de la banda de pie. El disco, en 3D, entra en el soporte desde dentro del aro.",
+          caption: "El disco es el modelo 3D del diseño actual; la banda está dibujada.",
+          labels: [
+            { key: "buckle", name: "Hebilla de acero" },
+            { key: "holder", name: "Soporte de silicona" },
+            { key: "strap", name: "Correa tejida", value: "27,4 mm" },
+            { key: "hook", name: "Cierre de gancho y lazo" },
+          ],
+        },
       },
     ],
   },

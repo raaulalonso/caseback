@@ -46,18 +46,53 @@ export const en = {
       {
         title: "Under the caseback",
         body: [
-          "The disc sits between the back of the watch and the wrist. A microsuction pad holds it to the caseback: no glue on the watch and no magnet near the movement.",
-          "From the outside the watch looks the same. The disc is designed to be 25 mm across and 3.1 mm thick.",
+          "The disc sits on the back of the watch, between the watch and the wrist. The whole face that touches the caseback is a microsuction pad: it is designed to hold without glue and without magnets near the movement, and to come off and go back on.",
+          "It is designed at 25 mm across and 3.1 mm thick, with a rounded edge on the skin side. From the outside the watch looks the same.",
         ],
-        art: { case: "Watch case", disc: "Disc", pad: "Pad", skin: "Wrist", thick: "3.1 mm" },
+        art: {
+          label: "Drawing of the back of a watch. The disc, in 3D, comes up to the caseback and stays on it.",
+          caption: "The disc is the 3D model of the current design; the watch is drawn.",
+          labels: [
+            { key: "caseback", name: "Watch caseback" },
+            { key: "pad", name: "Microsuction pad", value: "Ø 23 mm" },
+            { key: "disc", name: "Disc", value: "Ø 25 mm" },
+            { key: "thick", name: "Thickness", value: "3.1 mm" },
+          ],
+        },
       },
       {
-        title: "Charging, and the band",
+        title: "Charged on the watch",
         body: [
-          "To charge, the watch lies dial up on a small round puck with the disc still stuck behind it. Two contacts on the skin face of the disc touch two spring pins in the puck.",
-          "Without the watch, a fabric band holds the disc against the wrist for sleep or training.",
+          "It charges without coming off: the watch lies dial up on the charger and the disc clicks into it. A hook and a sprung latch go into two pockets in the rim of the disc and hold it down on two spring pins, which touch the two steel contacts on its skin face.",
+          "A button on the rim of the charger lets it out. The charger takes USB-C and has no magnet. The same click works with the disc on its own or in the band.",
         ],
-        art: { puck: "Charging puck", band: "Fabric band" },
+        art: {
+          label: "Drawing of a watch lying dial up that comes down onto the charger, also drawn, until the disc on its back, in 3D, clicks into it.",
+          caption: "The disc is the 3D model of the current design; the watch and the charger are drawn.",
+          labels: [
+            { key: "watch", name: "Watch, dial up" },
+            { key: "disc", name: "Disc, clicked in" },
+            { key: "button", name: "Release button" },
+            { key: "charger", name: "Charger", value: "Ø 34 mm" },
+          ],
+        },
+      },
+      {
+        title: "Without a watch, in the band",
+        body: [
+          "For sleep or training without a watch, the disc goes into a band: a woven strap that starts in a silicone holder, goes once round the wrist, passes through a steel buckle and closes on itself with hook-and-loop.",
+          "The disc goes into the holder from the skin side and its face stays out, so it charges without leaving the band: the charger clicks on the same way.",
+        ],
+        art: {
+          label: "Drawing of the band standing on its edge. The disc, in 3D, goes into the holder from the inside of the loop.",
+          caption: "The disc is the 3D model of the current design; the band is drawn.",
+          labels: [
+            { key: "buckle", name: "Steel buckle" },
+            { key: "holder", name: "Silicone holder" },
+            { key: "strap", name: "Woven strap", value: "27.4 mm" },
+            { key: "hook", name: "Hook-and-loop closure" },
+          ],
+        },
       },
     ],
   },

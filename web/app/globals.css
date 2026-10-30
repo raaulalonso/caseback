@@ -363,6 +363,38 @@ button { background: none; border: 0; cursor: pointer; }
 .art-flow { margin-top: 30px; }
 .art-flow.only-narrow { max-width: 480px; }
 
+/* wear: 3D plates (components/art/wear). The canvas fades in once the models are there; lines and names come in as the
+   scene settles, and the names hang in one column on the right, each on its row. On a narrow figure they become a key. */
+.wear-figure { margin: 0; }
+.wear-stage { position: relative; width: 100%; aspect-ratio: 4 / 3; touch-action: pan-y; }
+.wear-figure.narrow .wear-stage { aspect-ratio: 1 / 1; }
+.wear-figure.failed .wear-stage { display: none; }
+/* the edges of the picture fade out, so a strap that runs out of the frame does not end on a hard line */
+.wear-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.7s var(--ease);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent), linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent), linear-gradient(to bottom, transparent, #000 8%, #000 92%, transparent);
+  mask-composite: intersect;
+}
+.wear-stage[data-ready] .wear-canvas { opacity: 1; }
+.wear-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.wear-lines polyline { fill: none; stroke: var(--ink-3); stroke-width: 1px; transition: stroke 0.24s var(--ease); }
+.wear-lines circle { fill: var(--ink-1); stroke: #000; stroke-width: 2px; transition: fill 0.24s var(--ease); }
+.wear-lines .on polyline { stroke: var(--lume); }
+.wear-lines .on circle { fill: var(--lume); }
+.wear-figure.narrow .wear-lines circle { fill: #000; stroke: var(--ink-2); stroke-width: 1px; }
+.wear-lines text { font-family: var(--mono); font-size: 11px; fill: var(--ink-1); text-anchor: middle; }
+.wear-labels { position: absolute; left: 66%; right: 0; top: 0; bottom: 0; list-style: none; }
+.wear-labels li { position: absolute; left: 0; transform: translateY(-50%); display: grid; gap: 2px; font-size: 14px; line-height: 1.3; color: var(--ink-1); text-shadow: 0 0 6px #000, 0 0 2px #000; cursor: default; }
+.wear-labels .name, .wear-key .name { transition: color 0.24s var(--ease); }
+.wear-labels li.on .name, .wear-key li.on .name { color: var(--lume); }
+.wear-labels .value, .wear-key .value { font-size: 12.5px; color: var(--ink-2); }
+.wear-key { list-style: none; margin-top: 12px; }
+.wear-key li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 10px; align-items: baseline; padding: 11px 0; border-top: 1px solid var(--hair); font-size: 14px; }
+.wear-key li:last-child { border-bottom: 1px solid var(--hair); }
+.wear-key .num { font-size: 12px; color: var(--ink-3); }
+
 @media (max-width: 1360px) {
   .plate { grid-template-columns: minmax(300px, 340px) minmax(0, 1fr); column-gap: 5vw; }
 }
