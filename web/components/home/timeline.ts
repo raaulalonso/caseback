@@ -14,22 +14,22 @@ export const T = {
 
 export const B = {
   turn: 0, // one cubic in-out: the dial turns away to edge-on in the first half, the disc comes round in the second
-  turnDur: 0.9,
-  open: 0.78, // the disc opens along its axis while the camera drops to the exploded view
-  openDur: 1.05,
-  close: 2.3, // the parts close up in the order they go in, 160 ms apart, while the camera rises to rest
-  step: 0.16,
-  drop: 0.62,
-  rest: 3.95, // the camera is at rest
-  pulse: 3.62, // the LEDs light once as the last part closes
-  pulseDur: 0.7,
-  callouts: 3.8,
-  done: 4.75,
-  doneCompact: 4.0, // on a phone only the central drawing moves; the rest arrives once it is finished
+  turnDur: 1.12,
+  open: 0.97, // the disc opens along its axis while the camera drops to the exploded view
+  openDur: 1.3,
+  close: 2.85, // the parts close up in the order they go in, 200 ms apart, while the camera rises to rest
+  step: 0.2,
+  drop: 0.77,
+  rest: 4.9, // the camera is at rest
+  pulse: 4.49, // the LEDs light once as the last part closes
+  pulseDur: 0.87,
+  callouts: 4.71,
+  done: 5.89,
+  doneCompact: 4.96, // on a phone only the central drawing moves; the rest arrives once it is finished
   // side view: the disc goes up onto the caseback as it closes, then the wrist comes up to meet it
-  side: 3.2,
-  sideDur: 0.8,
-  wrist: 3.75,
+  side: 3.97,
+  sideDur: 0.99,
+  wrist: 4.65,
 } as const;
 
 /** Cubic in-out, the one ease for drawing and for travel. */

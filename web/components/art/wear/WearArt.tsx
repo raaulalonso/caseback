@@ -2,19 +2,22 @@
 
 // A plate of "How it's worn" (./scenes.ts: the 3D disc in a drawing) with lines from its parts to their names, as on the
 // home page. The scene plays as the plate comes up the screen: its progress is how far the middle of the figure has risen,
-// from the bottom of the screen to 58 % of its height, so scrolling back plays it backwards. Three.js and the model load
-// when the figure is near; the canvas draws only while it is on screen and something moves. Pointing at a name lights its
-// line and moves its part; on a narrow figure the names go into a numbered key below, where a tap does the same. Without
-// WebGL the key is all that shows.
+// from a fifth of a screen below the bottom to 60 % of the height (or the end of the page), so scrolling back plays it
+// backwards. Three.js and the model load when the figure is near; the canvas draws only while it is on screen and
+// something moves. Pointing at a name (or tapping it) lights its line and moves its part. A narrow figure (a phone) is
+// square, with the drawing smaller and the names smaller in a narrower column; without WebGL the names are all that shows.
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { WearKind, WearScene } from "./scenes";
 
 export type WearLabel = { key: string; name: string; value?: string };
 
-const NARROW = 560; // px of figure width under which the names go below
+const NARROW = 560; // px of figure width under which the figure is square and the names smaller (a phone)
 const ROWS = [0.2, 0.4, 0.6, 0.8]; // label rows, as shares of the height
+/** Where the column of names starts (share of the width) and the length of the level end of each line, in px. */
+const COLUMN = { wide: 0.66, narrow: 0.6 };
+const SHOULDER = { wide: 36, narrow: 18 };
 
-export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labels: WearLabel[]; label: string; caption?: string }) {
+export function WearArt({ kind, labels, label }: { kind: WearKind; labels: WearLabel[]; label: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const linesRef = useRef<SVGGElement>(null);
@@ -41,7 +44,7 @@ export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labe
       const r = box.getBoundingClientRect();
       dims = { w: r.width, h: r.height, narrow: r.width < NARROW };
       setSize({ w: r.width, h: r.height });
-      scene?.resize(r.width, r.height, !dims.narrow);
+      scene?.resize(r.width, r.height, dims.narrow);
     };
     const ro = new ResizeObserver(fit);
     ro.observe(box);
@@ -53,25 +56,19 @@ export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labe
       const g = linesRef.current;
       if (g) {
         g.style.opacity = String(reveal);
+        const layout = dims.narrow ? "narrow" : "wide";
         labels.forEach((l, i) => {
           const [x, y] = a[l.key] ?? [0, 0];
-          const line = g.querySelector<SVGPolylineElement>(`[data-k="${l.key}"] polyline`);
-          const dot = g.querySelector<SVGCircleElement>(`[data-k="${l.key}"] circle`);
-          const num = g.querySelector<SVGTextElement>(`[data-k="${l.key}"] text`);
-          if (dims.narrow) line?.setAttribute("points", "");
-          else {
-            const lx = dims.w * 0.66 - 10;
-            const ry = dims.h * ROWS[i];
-            const ex = Math.max(lx - 36, Math.min(x + 16, lx - 6)); // the elbow never falls behind a mark close to the names
-            line?.setAttribute("points", `${x.toFixed(1)},${y.toFixed(1)} ${ex.toFixed(1)},${ry.toFixed(1)} ${lx.toFixed(1)},${ry.toFixed(1)}`);
-          }
+          const lx = dims.w * COLUMN[layout] - (dims.narrow ? 6 : 10);
+          const ry = dims.h * ROWS[i];
+          const ex = Math.max(lx - SHOULDER[layout], Math.min(x + 16, lx - 6)); // the elbow never falls behind a mark close to the names
+          g.querySelector(`[data-k="${l.key}"] polyline`)?.setAttribute("points", `${x.toFixed(1)},${y.toFixed(1)} ${ex.toFixed(1)},${ry.toFixed(1)} ${lx.toFixed(1)},${ry.toFixed(1)}`);
+          const dot = g.querySelector(`[data-k="${l.key}"] circle`);
           dot?.setAttribute("cx", x.toFixed(1));
           dot?.setAttribute("cy", y.toFixed(1));
-          num?.setAttribute("x", x.toFixed(1));
-          num?.setAttribute("y", y.toFixed(1));
         });
       }
-      if (labelsRef.current) labelsRef.current.style.opacity = dims.narrow ? "1" : String(reveal);
+      if (labelsRef.current) labelsRef.current.style.opacity = String(reveal);
     };
 
     const loop = (now: number) => {
@@ -81,7 +78,9 @@ export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labe
         const r = box.getBoundingClientRect();
         const vh = window.innerHeight;
         const centre = r.top + r.height / 2;
-        const target = reduced ? 1 : Math.min(1, Math.max(0, (vh - centre) / (vh * 0.42)));
+        // the last plate may not get that far up before the page ends: once the page is at its end, a plate in sight is done
+        const end = window.scrollY + vh >= document.documentElement.scrollHeight - 2 && r.top < vh;
+        const target = reduced || end ? 1 : Math.min(1, Math.max(0, (1.2 * vh - centre) / (0.6 * vh)));
         if (scene.frame(target, dt, reduced)) draw();
       }
       raf = visible ? requestAnimationFrame(loop) : 0;
@@ -90,7 +89,7 @@ export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labe
     const start = () => {
       started = true;
       import("./scenes")
-        .then((m) => m.WearScene.create(kind, canvas, box.getBoundingClientRect().width >= NARROW))
+        .then((m) => m.WearScene.create(kind, canvas, box.getBoundingClientRect().width < NARROW))
         .then((s) => {
           if (disposed) return s.dispose();
           scene = sceneRef.current = s;
@@ -138,7 +137,7 @@ export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labe
     sceneRef.current?.setFocus(hover === null ? null : labels[hover].key);
   }, [hover, labels]);
 
-  // a mouse points, a finger taps a name on and off
+  // a mouse points at a name; on a touch screen a tap turns it on and off
   const point = (i: number) => ({
     onPointerEnter: (e: ReactPointerEvent) => e.pointerType !== "touch" && setHover(i),
     onPointerLeave: (e: ReactPointerEvent) => e.pointerType !== "touch" && setHover(null),
@@ -154,13 +153,12 @@ export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labe
             {labels.map((l, i) => (
               <g key={l.key} data-k={l.key} className={hover === i ? "on" : undefined}>
                 <polyline />
-                <circle r={narrow ? 9 : 3.5} />
-                {narrow && <text dy="0.36em">{i + 1}</text>}
+                <circle r={narrow ? 3 : 3.5} />
               </g>
             ))}
           </g>
         </svg>
-        {!narrow && (
+        {!failed && (
           <ol ref={labelsRef} className="wear-labels" style={{ opacity: 0 }}>
             {labels.map((l, i) => (
               <li key={l.key} style={{ top: `${ROWS[i] * 100}%` }} className={hover === i ? "on" : undefined} {...point(i)}>
@@ -171,18 +169,16 @@ export function WearArt({ kind, labels, label, caption }: { kind: WearKind; labe
           </ol>
         )}
       </div>
-      {(narrow || failed) && (
+      {failed && (
         <ol className="wear-key">
-          {labels.map((l, i) => (
-            <li key={l.key} className={hover === i ? "on" : undefined} {...point(i)}>
-              <span className="num mono">{i + 1}</span>
+          {labels.map((l) => (
+            <li key={l.key}>
               <span className="name">{l.name}</span>
               {l.value && <span className="value mono">{l.value}</span>}
             </li>
           ))}
         </ol>
       )}
-      {caption && !failed && <figcaption>{caption}</figcaption>}
     </figure>
   );
 }

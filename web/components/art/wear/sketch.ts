@@ -3,8 +3,9 @@
 //
 // Hidden lines are left out as in a technical drawing. Each drawn body also has an invisible stand-in (a "solid") that
 // writes depth and no colour, so lines behind it fail the depth test; the disc writes depth as it draws, so lines behind
-// it go too. Draw order: the disc first, then the solids, then the lines. The solids come after the disc, so they hide
-// lines and never the disc: the drawing is see-through where the disc is behind it, as a cut-away would be.
+// it go too. Draw order: the disc first, then the solids, then the lines, so a solid hides lines and not the disc and the
+// drawing is see-through where the disc is behind it, as a cut-away would be. A solid that should hide the disc (the rim of
+// the charger round it) is drawn before it instead.
 //
 // A curved side has no edge to draw where it turns away from the eye, so those outlines (Side) are worked out each frame
 // from where the camera is. Each stroke is measured from 0 at its start to 1 at its end, so the whole drawing can grow
@@ -20,8 +21,8 @@ export const X = v(1, 0, 0);
 export const Y = v(0, 1, 0);
 export const Z = v(0, 0, 1);
 
-/** Order of drawing within the scene (see the top of the file). */
-const ORDER = { solid: 1, line: 2 };
+/** Order of drawing within the scene (see the top of the file); the disc is at 0. */
+const ORDER = { front: -1, solid: 1, line: 2 };
 
 /** Strokes in the frame of the node they will be added to. */
 export class Pen {
@@ -198,20 +199,20 @@ const HIDE = new THREE.MeshBasicMaterial({
   polygonOffsetUnits: 2,
 });
 
-/** An invisible stand-in for a drawn body, in the frame of `node`. */
-export function solid(node: THREE.Object3D, geometry: THREE.BufferGeometry) {
+/** An invisible stand-in for a drawn body, in the frame of `node`; `hidesDisc` draws it before the disc. */
+export function solid(node: THREE.Object3D, geometry: THREE.BufferGeometry, hidesDisc = false) {
   const m = new THREE.Mesh(geometry, HIDE);
-  m.renderOrder = ORDER.solid;
+  m.renderOrder = hidesDisc ? ORDER.front : ORDER.solid;
   node.add(m);
   return m;
 }
 
 /** A solid cylinder about the axis through `c` along `axis` (unit), from `h0` to `h1` along it. */
-export function solidCylinder(node: THREE.Object3D, c: THREE.Vector3, axis: THREE.Vector3, r: number, h0: number, h1: number) {
+export function solidCylinder(node: THREE.Object3D, c: THREE.Vector3, axis: THREE.Vector3, r: number, h0: number, h1: number, hidesDisc = false) {
   const g = new THREE.CylinderGeometry(r, r, h1 - h0, 48);
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, axis));
   g.translate(c.x + axis.x * ((h0 + h1) / 2), c.y + axis.y * ((h0 + h1) / 2), c.z + axis.z * ((h0 + h1) / 2));
-  return solid(node, g);
+  return solid(node, g, hidesDisc);
 }
 
 /** A solid strip along `pts`, `half` wide either side along `across` at each point. */
@@ -237,7 +238,7 @@ export function solidBox(node: THREE.Object3D, min: THREE.Vector3, max: THREE.Ve
 }
 
 /** A solid ring of rectangular section about the axis +Y: radii r0 to r1, heights y0 to y1. */
-export function solidRing(node: THREE.Object3D, r0: number, r1: number, y0: number, y1: number) {
+export function solidRing(node: THREE.Object3D, r0: number, r1: number, y0: number, y1: number, hidesDisc = false) {
   const profile = [new THREE.Vector2(r0, y0), new THREE.Vector2(r1, y0), new THREE.Vector2(r1, y1), new THREE.Vector2(r0, y1), new THREE.Vector2(r0, y0)];
-  return solid(node, new THREE.LatheGeometry(profile, 64));
+  return solid(node, new THREE.LatheGeometry(profile, 64), hidesDisc);
 }

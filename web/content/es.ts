@@ -51,7 +51,6 @@ export const es: typeof en = {
         ],
         art: {
           label: "Dibujo de la parte de atrás de un reloj. El disco, en 3D, sube hasta la tapa y se queda en ella.",
-          caption: "El disco es el modelo 3D del diseño actual; el reloj está dibujado.",
           labels: [
             { key: "caseback", name: "Tapa del reloj" },
             { key: "pad", name: "Almohadilla de microsucción", value: "Ø 23 mm" },
@@ -61,17 +60,16 @@ export const es: typeof en = {
         },
       },
       {
-        title: "Se carga en el reloj",
+        title: "Se carga en su base",
         body: [
-          "Para cargarlo no hace falta quitarlo: el reloj se deja con la esfera hacia arriba sobre la base de carga y el disco encaja en ella. Un gancho y un pestillo con muelle entran en dos huecos del borde del disco y lo aprietan contra dos pines con muelle, que tocan los dos contactos de acero de la cara de la piel.",
-          "Para sacarlo se pulsa el botón del borde de la base. La base se conecta por USB-C y no lleva imanes. El mismo encaje vale con el disco solo o en la banda.",
+          "El disco encaja en la base de carga con la cara de la piel hacia abajo. Un gancho y un pestillo con muelle entran en dos huecos de su borde y lo aprietan contra dos pines con muelle, que tocan los dos contactos de acero de esa cara.",
+          "Para sacarlo se pulsa el botón del borde de la base. La base se conecta por USB-C y no lleva imanes. No hace falta despegarlo del reloj para cargarlo: el reloj se deja con la esfera hacia arriba sobre la base y el disco encaja igual, y lo mismo con el disco en la banda.",
         ],
         art: {
-          label: "Dibujo de un reloj con la esfera hacia arriba que baja sobre la base de carga, también dibujada, hasta que el disco de su tapa, en 3D, encaja en ella.",
-          caption: "El disco es el modelo 3D del diseño actual; el reloj y la base están dibujados.",
+          label: "Dibujo de la base de carga vista desde arriba. El disco, en 3D, baja hasta su plato y encaja en él.",
           labels: [
-            { key: "watch", name: "Reloj, esfera arriba" },
             { key: "disc", name: "Disco, encajado" },
+            { key: "latch", name: "Pestillo con muelle" },
             { key: "button", name: "Botón para soltarlo" },
             { key: "charger", name: "Base de carga", value: "Ø 34 mm" },
           ],
@@ -85,7 +83,6 @@ export const es: typeof en = {
         ],
         art: {
           label: "Dibujo de la banda de pie. El disco, en 3D, entra en el soporte desde dentro del aro.",
-          caption: "El disco es el modelo 3D del diseño actual; la banda está dibujada.",
           labels: [
             { key: "buckle", name: "Hebilla de acero" },
             { key: "holder", name: "Soporte de silicona" },

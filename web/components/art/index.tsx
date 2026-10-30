@@ -16,7 +16,7 @@ const WEAR: WearKind[] = ["caseback", "charge", "band"];
 export function plateArt(section: Section, index: number, t: Dict, lang: Locale): ReactNode {
   if (section === "wear") {
     const a = t.wear.plates[index]?.art;
-    return a ? <WearArt kind={WEAR[index]} labels={a.labels} label={a.label} caption={a.caption} /> : null;
+    return a ? <WearArt kind={WEAR[index]} labels={a.labels} label={a.label} /> : null;
   }
   if (section === "measure") {
     const a = t.measure.art;

@@ -33,7 +33,7 @@ export type Callout = {
 // left; the right has one, under the side view. None of the lines cross.
 const E = 372;
 export const CALLOUTS: Callout[] = [
-  { key: "open", anchor: [-235, -128], elbow: polar(322, E), side: "l" }, // the edge of the shell
+  { key: "open", anchor: [-235, -128], elbow: [-330, polar(322, E)[1]], side: "l" }, // the edge of the shell, out at 60 degrees
   { key: "wear", anchor: [-247, 37], elbow: [-E, 0], side: "l" }, // the pad, behind the left edge
   { key: "measure", anchor: [0, -31], elbow: polar(218, E), side: "l" }, // the sensor window
   { key: "app", anchor: [0, 151], elbow: polar(142, E), side: "r" }, // the antenna, inside under the mark

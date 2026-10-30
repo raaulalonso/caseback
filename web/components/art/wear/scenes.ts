@@ -1,14 +1,13 @@
-// The 3D plates of "How it's worn": the disc going onto the back of a watch, the watch lying dial up on the charger while
-// the disc clicks into it, and the disc going into the band. The disc is the model of the home page (public/models/disc.glb,
-// from hardware/mechanical/scripts/export_web.py); the watch, the charger and the band are drawn round it in lines
-// (./sketch.ts), to the numbers of their designs, in millimetres: the charger of D59 (generate_disc.py, build_puck) and the
-// band of D58 (generate_band.py, band_v01.py).
+// The 3D plates of "How it's worn": the disc going onto the back of a watch, the disc clicking into its charger, and the
+// disc going into the band. The disc is the model of the home page (public/models/disc.glb, from
+// hardware/mechanical/scripts/export_web.py); the watch, the charger and the band are drawn round it in lines (./sketch.ts),
+// to the numbers of their designs, in millimetres: the charger of D59 (generate_disc.py, build_puck) and the band of D58
+// (generate_band.py, band_v01.py).
 //
 // Each scene is driven by one number, `p`, from 0 to 1: how far the plate has come up the screen (WearArt). It follows on a
-// critically damped spring, so scrolling back plays the plate backwards and a fling never jerks it, and every pose is a
-// monotone spline of p. The drawing draws itself first, then the disc comes in. Pointing at a name moves its part on a
-// second spring, `f`: the disc comes off the caseback, the watch comes up off the charger, the disc comes out of its holder.
-// Nothing moves on its own except the hands of the drawn watch on the charger, which keep the visitor's time.
+// slow critically damped spring, so scrolling back plays the plate backwards and a fling never jerks it, and every pose is
+// a monotone spline of p. The drawing draws itself first, then the disc comes in. Pointing at a name moves its part on a
+// second spring, `f`: the disc comes off the caseback, out of the charger, out of its holder. Nothing moves on its own.
 import * as THREE from "three";
 import { DEG, createRenderer, disposeScene, loadModel, pixelRatio, precompile, prepareAll, s0, spring, track } from "../../three/core";
 import { Ink, Pen, TAU, X, Y, Z, solid, solidBox, solidCylinder, solidRing, solidStrip, v } from "./sketch";
@@ -26,9 +25,8 @@ const DISH = 5.8;
 /** How far the button stands out of the charger's rim, which is how far the latch moves (D59). */
 const BUTTON = 0.8;
 /** The drawing draws itself over the first part of the progress; the disc moves over the rest. */
-const DRAWN = track([[0.02, 0], [0.42, 1]]);
+const DRAWN = track([[0.02, 0], [0.45, 1]]);
 
-type Hands = { hour: THREE.Object3D; minute: THREE.Object3D; second: THREE.Object3D };
 type Built = {
   rig: THREE.Group;
   pose: Pose;
@@ -36,15 +34,15 @@ type Built = {
   fit: number;
   /** Share of the width the subject moves left by, to leave the labels room on the right. */
   shift: number;
-  /** How much closer the camera comes when the names go below the picture and the subject has the whole width. */
-  narrowZoom?: number;
+  /** On a narrow (square) figure: how far the subject moves left, and how much closer (or further) the camera is. */
+  narrowShift: number;
+  narrowZoom: number;
   anchors: Record<string, THREE.Object3D>;
   /** Places the parts for progress `p` and for `f`, how far the part whose name is pointed at has moved (0..1). */
   update: (p: number, f: number) => void;
   /** The names that move a part. */
   focusable: string[];
   ink: Ink;
-  hands?: Hands;
 };
 
 export class WearScene {
@@ -61,9 +59,8 @@ export class WearScene {
   private aim: { x: number; y: number } | null = null;
   private size = { w: 1, h: 1 };
   private sized = "";
-  private beside = true;
+  private narrow = false;
   private dirty = true;
-  private second = -1;
   private v = new THREE.Vector3();
 
   private constructor(canvas: HTMLCanvasElement, built: Built) {
@@ -72,14 +69,14 @@ export class WearScene {
     this.scene.add(built.rig, built.ink.liveLines);
   }
 
-  /** `beside`: see resize. The scene is drawn once at the canvas's size before it is returned (see warm). */
-  static async create(kind: WearKind, canvas: HTMLCanvasElement, beside: boolean) {
+  /** `narrow`: see resize. The scene is drawn once at the canvas's size before it is returned (see warm). */
+  static async create(kind: WearKind, canvas: HTMLCanvasElement, narrow: boolean) {
     const disc = (await loadModel("disc")).scene.clone(true);
     prepareAll(disc);
     const built = kind === "caseback" ? caseback(disc) : kind === "charge" ? charge(disc) : band(disc);
     const scene = new WearScene(canvas, built);
     const r = canvas.getBoundingClientRect();
-    if (r.width > 0) scene.resize(r.width, r.height, beside);
+    if (r.width > 0) scene.resize(r.width, r.height, narrow);
     await scene.warm();
     return scene;
   }
@@ -105,18 +102,18 @@ export class WearScene {
     this.dirty = true;
   }
 
-  /** `beside`: the names stand on the right of the picture, so the subject moves left to leave them room. */
-  resize(w: number, h: number, beside: boolean) {
+  /** The names stand on the right of the picture, so the subject moves left to leave them room; `narrow`: a phone's. */
+  resize(w: number, h: number, narrow: boolean) {
     const ratio = pixelRatio(w, h);
-    const key = `${w}x${h}@${ratio}/${beside}`;
+    const key = `${w}x${h}@${ratio}/${narrow}`;
     if (key === this.sized) return;
     this.sized = key;
     this.size = { w, h };
-    this.beside = beside;
+    this.narrow = narrow;
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    this.camera.setViewOffset(w, h, beside ? this.built.shift * w : 0, 0, w, h);
+    this.camera.setViewOffset(w, h, (narrow ? this.built.narrowShift : this.built.shift) * w, 0, w, h);
     this.camera.updateProjectionMatrix();
     this.dirty = true;
   }
@@ -133,24 +130,18 @@ export class WearScene {
       else spring(sp, to, dt, w);
       if (sp.x !== to || sp.v !== 0) moving = true;
     };
-    step(this.p, target, 5);
+    step(this.p, target, 3.2);
     const aim = this.aim && !still ? this.aim : { x: 0, y: 0 };
     step(this.tiltX, aim.x, 4);
     step(this.tiltY, aim.y, 4);
-    step(this.focus, this.focusKey && this.built.focusable.includes(this.focusKey) ? 1 : 0, 7);
-    const now = new Date();
-    if (this.built.hands && now.getSeconds() !== this.second) {
-      this.second = now.getSeconds();
-      setHands(this.built.hands, now);
-      moving = true;
-    }
+    step(this.focus, this.focusKey && this.built.focusable.includes(this.focusKey) ? 1 : 0, 5);
     if (!moving) return false;
 
     const p = Math.min(1, Math.max(0, this.p.x));
     const { rig, pose, fit, ink } = this.built;
     this.built.update(p, Math.min(1, Math.max(0, this.focus.x)));
     rig.rotation.set((pose.tilt(p) + this.tiltY.x * 3) * DEG, (pose.yaw(p) + this.tiltX.x * 5) * DEG, 0, "XYZ");
-    const zoom = pose.zoom(p) * (this.beside ? 1 : (this.built.narrowZoom ?? 1));
+    const zoom = pose.zoom(p) * (this.narrow ? this.built.narrowZoom : 1);
     const dist = fit / zoom / Math.tan((FOV / 2) * DEG);
     this.camera.position.set(0, 0, dist);
     this.camera.lookAt(0, 0, 0);
@@ -194,16 +185,6 @@ function mark(node: THREE.Object3D, at: THREE.Vector3) {
 /** A point on the round edge of the disc, in its own frame: angle from +x towards +z, radius, height above the skin face. */
 const rim = (deg: number, r: number, y: number) => v(r * Math.cos(deg * DEG), y, r * Math.sin(deg * DEG));
 
-function setHands(h: Hands, d: Date) {
-  // the hands point at 12 along +y and turn clockwise seen from the dial (+z): negative angles about z
-  const s = d.getSeconds();
-  const m = d.getMinutes() + s / 60;
-  const hr = (d.getHours() % 12) + m / 60;
-  h.hour.rotation.z = -hr * 30 * DEG;
-  h.minute.rotation.z = -m * 6 * DEG;
-  h.second.rotation.z = -s * 6 * DEG;
-}
-
 const smooth = (x: number) => {
   const s = Math.min(1, Math.max(0, x));
   return s * s * (3 - 2 * s);
@@ -212,10 +193,9 @@ const smooth = (x: number) => {
 // ------------------------------------------------------------------------------------------------------------ the watch
 /**
  * A watch of 44 mm in lines, in its own frame: dial towards +z, 12 o'clock towards +y, crown towards +x, the middle of the
- * case at z = 0 and the caseback plate, where the disc goes, at z = -4.4. `dial` draws the indices and the hands too, and
- * `straps` the straps.
+ * case at z = 0 and the caseback plate, where the disc goes, at z = -4.4, with its straps.
  */
-function drawWatch(ink: Ink, dial: boolean, straps: boolean) {
+function drawWatch(ink: Ink) {
   const g = new THREE.Group();
   const edge = new Pen();
   const fine = new Pen();
@@ -238,7 +218,7 @@ function drawWatch(ink: Ink, dial: boolean, straps: boolean) {
     { node: g, c: at(0), axis: Z, u: X, r: 21.2, h0: TOP, h1: BEZEL },
     { node: g, c: at(0), axis: Z, u: X, r: PLATE, h0: CASEBACK_Z, h1: BACK },
   );
-  // the case is solid up to just under the dial, the bezel is a ring round it, so the dial shows from above
+  // the case is solid up to just under the crystal, and the bezel is a ring round it
   solidCylinder(g, at(0), Z, R - 0.12, BACK + 0.1, TOP - 0.15);
   solidRing(g, 18.75, 20.7, TOP - 0.15, BEZEL - 0.12).rotation.x = 90 * DEG;
   solidCylinder(g, at(0), Z, PLATE - 0.12, CASEBACK_Z + 0.1, BACK + 0.1);
@@ -265,7 +245,7 @@ function drawWatch(ink: Ink, dial: boolean, straps: boolean) {
 
   // straps: out from the spring bars between the lugs, then round towards the wrist, which is behind the caseback
   const HALF = 10.4;
-  for (const sy of straps ? [-1, 1] : []) {
+  for (const sy of [-1, 1]) {
     const pts: THREE.Vector3[] = [];
     const n: THREE.Vector3[] = [];
     for (let y = 22.6; y < 28.5; y += 1) {
@@ -284,39 +264,17 @@ function drawWatch(ink: Ink, dial: boolean, straps: boolean) {
     solidStrip(g, pts, X, half.map((h) => h - 0.12));
   }
 
-  let hands: Hands | undefined;
-  if (dial) {
-    const D = 3.5; // dial
-    for (let i = 0; i < 60; i++) {
-      const a = i * 6 * DEG;
-      const d = v(Math.sin(a), Math.cos(a), 0);
-      if (i % 5) fine.line(d.clone().multiplyScalar(17.5).setZ(D), d.clone().multiplyScalar(18.2).setZ(D));
-      else if (i === 0) for (const o of [-0.6, 0.6]) edge.line(v(o, 14.6, D), v(o, 17.4, D));
-      else edge.line(d.clone().multiplyScalar(14.8).setZ(D), d.clone().multiplyScalar(17.4).setZ(D));
-    }
-    const hand = (outline: [number, number][], z: number) => {
-      const h = new THREE.Group();
-      ink.draw(h, new Pen().stroke(outline.map(([x, y]) => v(x, y, z)), outline.length > 2), "edge");
-      g.add(h);
-      return h;
-    };
-    hands = {
-      hour: hand([[-0.7, -2], [-0.6, 9.5], [0, 10.3], [0.6, 9.5], [0.7, -2]], 3.7),
-      minute: hand([[-0.5, -2.5], [-0.4, 14.6], [0, 15.4], [0.4, 14.6], [0.5, -2.5]], 3.85),
-      second: hand([[0, -4], [0, 16.4]], 4),
-    };
-    edge.arc(at(4.05), X, Y, 0.9);
-  }
   ink.draw(g, edge, "edge");
   ink.draw(g, fine, "fine");
-  return { group: g, hands };
+  return g;
 }
 
 // ---------------------------------------------------------------------------------------------------------- the charger
 /**
- * The charger of D59 in lines, in its own frame: y up from the table, the button towards +z. A round body of 34 by 7 mm
- * with a dish 25.6 mm across and 1.2 mm deep, two spring pins in its floor, the hook in the wall at -z and the latch's slot
- * at +z with the button standing 0.8 mm out of the rim under it, and the USB-C socket at -z.
+ * The charger of D59 in lines, in its own frame: y up from the table, the button towards +z. A round body of 34 by 7 mm,
+ * rounded 0.8 mm at the foot and 0.5 mm at the top, with a dish 25.6 mm across and 1.2 mm deep (its edge chamfered 0.4 mm),
+ * two spring pins in its floor, the hook in its wall at -z, the latch's slot at +z with the button standing 0.8 mm out of
+ * the rim under it, and the USB-C socket at -z. Its body hides the disc where the rim of the dish is in front of it.
  */
 function drawCharger(ink: Ink) {
   const g = new THREE.Group();
@@ -326,10 +284,12 @@ function drawCharger(ink: Ink) {
   const H = 7;
   const DR = 12.8;
   const at = (y: number) => v(0, y, 0);
-  edge.arc(at(H), X, Z, R).arc(at(0), X, Z, R).arc(at(H), X, Z, DR).arc(at(DISH), X, Z, DR);
-  ink.sides.push({ node: g, c: at(0), axis: Y, u: X, r: R, h0: 0, h1: H }, { node: g, c: at(0), axis: Y, u: X, r: DR, h0: DISH, h1: H });
+  edge.arc(at(H), X, Z, R - 0.5).arc(at(0), X, Z, R - 0.8).arc(at(H), X, Z, DR + 0.4).arc(at(DISH), X, Z, DR);
+  fine.arc(at(H - 0.5), X, Z, R).arc(at(0.8), X, Z, R).arc(at(H - 0.4), X, Z, DR);
+  ink.sides.push({ node: g, c: at(0), axis: Y, u: X, r: R, h0: 0.8, h1: H - 0.5 }, { node: g, c: at(0), axis: Y, u: X, r: DR, h0: DISH, h1: H - 0.4 });
   for (const x of [-9, 9]) fine.arc(v(x, DISH + 0.01, 1), X, Z, 0.75); // the spring pins, under the disc's contacts
-  for (const x of [-2.2, 2.2]) fine.line(v(x, H, Math.sqrt(DR * DR - x * x)), v(x, H, Math.sqrt(R * R - x * x))); // the latch's slot
+  const slot = (x: number, r: number) => v(x, H, Math.sqrt(r * r - x * x));
+  for (const x of [-2.2, 2.2]) fine.line(slot(x, DR + 0.4), slot(x, R - 0.5)); // the latch's slot, open through the rim
   const hook = -DR + 0.05;
   fine.stroke([v(-1.5, DISH + 0.15, hook), v(-1.5, DISH + 0.75, hook), v(1.5, DISH + 0.75, hook), v(1.5, DISH + 0.15, hook)], true);
   const usb: THREE.Vector3[] = [];
@@ -339,8 +299,8 @@ function drawCharger(ink: Ink) {
     usb.push(v(c + 1.2 * Math.cos(a), 2.6 + 1.2 * Math.sin(a), -R + 0.3));
   }
   fine.stroke(usb, true);
-  solidCylinder(g, at(0), Y, R - 0.12, 0.1, DISH - 0.1);
-  solidRing(g, DR + 0.12, R - 0.12, DISH + 0.05, H - 0.1);
+  solidCylinder(g, at(0), Y, R - 0.12, 0.1, DISH - 0.1, true);
+  solidRing(g, DR + 0.12, R - 0.12, DISH + 0.05, H - 0.1, true);
 
   // the button: its face 0.8 mm out of the rim, and its sides back to the wall; it moves with the latch
   const button = new THREE.Group();
@@ -504,7 +464,7 @@ function drawBand(ink: Ink) {
 function caseback(disc: THREE.Object3D): Built {
   const rig = new THREE.Group();
   const ink = new Ink();
-  const watch = drawWatch(ink, false, true).group;
+  const watch = drawWatch(ink);
   const holder = new THREE.Group();
   holder.add(disc);
   holder.rotation.x = 90 * DEG; // the disc's +y, towards the watch, along the watch's +z, towards the dial
@@ -531,6 +491,8 @@ function caseback(disc: THREE.Object3D): Built {
     ink,
     fit: 34,
     shift: 0.1,
+    narrowShift: 0.2,
+    narrowZoom: 0.8,
     anchors,
     update,
     focusable: ["pad", "disc", "thick"],
@@ -539,54 +501,46 @@ function caseback(disc: THREE.Object3D): Built {
 }
 
 /**
- * Plate 2: the watch dial up, the disc still on its back, coming down from above the picture onto the charger until the
- * latch clicks, while the camera comes down from over the dish (its pins, the hook and the latch) to the height of the
- * join, where the disc shows between the watch and the charger. Pointing at the disc or the button presses the button: the
- * latch draws back and the watch comes up off the dish.
+ * Plate 2: the charger seen from above, and the disc coming down into its dish skin face first, its contacts over the pins,
+ * until the latch clicks; the camera comes down a little as it goes in. Pointing at the disc, the latch or the button
+ * presses the button: the latch draws back and the disc comes up out of the dish.
  */
 function charge(disc: THREE.Object3D): Built {
   const rig = new THREE.Group();
   const ink = new Ink();
   const charger = drawCharger(ink);
-  const watch = drawWatch(ink, true, false); // the head alone: straps would run across the names
-  const top = new THREE.Group(); // the watch and the disc on it, which come down together
-  const turn = new THREE.Group(); // the straps run left and right, the crown away from the camera
-  turn.rotation.y = 90 * DEG;
-  watch.group.rotation.x = -90 * DEG; // dial up
-  turn.position.y = DISH + DISC_H - CASEBACK_Z;
-  turn.add(watch.group);
-  disc.position.y = DISH; // the disc keeps the charger's frame: its contacts over the pins, its pockets on the hook and the latch
-  top.add(turn, disc);
-  rig.add(charger.group, top);
-  const drop = track([[0.25, 52], [0.85, 0]]);
+  const holder = new THREE.Group(); // the disc keeps the charger's frame: its contacts over the pins, its pockets on the hook and the latch
+  holder.add(disc);
+  rig.add(charger.group, holder);
+  rig.position.y = -4.5;
+  const drop = track([[0.25, 34], [0.85, 0]]);
   const update = (p: number, f: number) => {
     const press = Math.min(1, f / 0.35);
     const rise = f <= 0.35 ? 0 : (f - 0.35) / 0.65;
-    const h = drop(p) + 7 * rise * rise * (3 - 2 * rise);
-    top.position.y = h;
-    rig.position.y = -9 - 0.2 * drop(p); // the watch comes in from above the picture, which follows it a little
+    const h = drop(p) + 5 * rise * rise * (3 - 2 * rise);
+    holder.position.y = DISH + h;
     // the rim of the disc pushes the latch back as it passes, and the spring snaps it in when the disc is down
     charger.button.position.z = BUTTON * Math.max(press, 1 - Math.abs(h - 0.55) / 0.55, 0);
   };
   update(1, 0);
-  // the camera looks from +z, the side of the button: the case at 9 o'clock, the rim of the disc, the button, the charger
+  // the camera looks down from the side of the button: the top of the disc, the latch's slot, the button, the foot of the body
   const anchors = {
-    watch: mark(watch.group, v(-22, 0, 2)),
-    disc: mark(disc, rim(115, 12.5, 1.6)),
+    disc: mark(disc, rim(330, 12.3, DISC_H)),
+    latch: mark(charger.group, v(0, 7, 15.2)),
     button: mark(charger.button, v(0, 4.7, 17 + BUTTON)),
-    charger: mark(charger.group, v(17 * Math.cos(55 * DEG), 1.6, 17 * Math.sin(55 * DEG))),
+    charger: mark(charger.group, v(16.4 * Math.cos(75 * DEG), 0.2, 16.4 * Math.sin(75 * DEG))),
   };
   return {
     rig,
     ink,
-    fit: 33,
-    shift: 0.2,
-    narrowZoom: 1.3,
+    fit: 25,
+    shift: 0.19,
+    narrowShift: 0.21,
+    narrowZoom: 0.82,
     anchors,
     update,
-    focusable: ["disc", "button"],
-    hands: watch.hands,
-    pose: { yaw: track([[0, 62], [1, 25]]), tilt: track([[0, 34], [1, 3]]), zoom: track([[0, 0.95], [1, 1.05]]) },
+    focusable: ["disc", "latch", "button"],
+    pose: { yaw: track([[0, 70], [1, 28]]), tilt: track([[0, 58], [1, 34]]), zoom: track([[0, 0.92], [1, 1]]) },
   };
 }
 
@@ -623,7 +577,8 @@ function band(disc: THREE.Object3D): Built {
     ink,
     fit: 47,
     shift: 0.15,
-    narrowZoom: 0.9,
+    narrowShift: 0.2,
+    narrowZoom: 0.86,
     anchors,
     update,
     focusable: ["holder"],

@@ -13,6 +13,9 @@
 // drawn once into an environment map, there are no shadow maps and no post-processing, and at rest it draws only when
 // something moves.
 import * as THREE from "three";
+import { Line2 } from "three/addons/lines/Line2.js";
+import { LineGeometry } from "three/addons/lines/LineGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { Section } from "@/lib/i18n";
 import { DEG, GLASS, createRenderer, disposeScene, loadModel, pixelRatio, precompile, prepare, s0, spring, track, type Spring } from "../three/core";
 import { CANVAS, R_CASE, U_MM, VIEW } from "./geometry";
@@ -37,8 +40,12 @@ const STACK: Record<string, { lift: number; step: number }> = {
 const PARTS = Object.keys(STACK).length;
 /** Lifted off the lid ("How it's worn"), the pad stands this far from it. */
 const PAD_OFF = 8;
-/** Parts that go see-through when the antenna is shown: everything between the skin face and the board. */
-const XRAY = ["shell", "window", "contacts"];
+/** "The app": rings of fine line go out from the rim in the plane of the disc, one after another, as if it were sending. */
+const WAVES = 3;
+const WAVE_PERIOD = 2.2; // seconds for one ring to go out and fade
+const WAVE_REACH = 16; // mm past the rim
+/** How fast each hover answers (angular frequency of its spring): the turn of "How it's worn" is slower. */
+const HOVER_RATE: Record<Section, number> = { wear: 4.5, open: 6, measure: 6, app: 6 };
 
 /**
  * Pose of the disc: yaw about the vertical and tilt about the horizontal, in degrees, and scale. Tilt -180 shows the skin
@@ -87,7 +94,6 @@ const ANCHORS: Record<Section, AnchorDef> = {
   app: { part: "board", node: "anchor_antenna" },
 };
 
-const LUME = new THREE.Color("#eef24b");
 const GREEN = new THREE.Color("#3ddc84");
 
 type Part = { node: THREE.Object3D; mats: THREE.MeshStandardMaterial[] };
@@ -110,7 +116,8 @@ export class Disc3D {
   private towards: THREE.Vector3 | null = null;
   private leds: THREE.MeshStandardMaterial[] = [];
   private glass: THREE.MeshStandardMaterial[] = [];
-  private antenna: THREE.MeshStandardMaterial[] = [];
+  private waves: Line2[] = [];
+  private waveTime = 0;
   private dirty = true;
   private wasRest = false;
   private size = "";
@@ -128,7 +135,7 @@ export class Disc3D {
     for (const name of ["shell", ...Object.keys(STACK)]) {
       const node = model.getObjectByName(name);
       if (!node) throw new Error(`disc.glb has no ${name}`);
-      // Each part gets its own materials, so a part can go see-through on its own.
+      // Each part gets its own materials, so a part can glow on its own.
       const mats: THREE.MeshStandardMaterial[] = [];
       node.traverse((o) => {
         if (!(o instanceof THREE.Mesh)) return;
@@ -137,7 +144,7 @@ export class Disc3D {
           mats.push(c);
           if (/^led_(green|red|IR)$/.test(c.name)) this.leds.push(c);
           if (GLASS.test(c.name) && name === "window") this.glass.push(c);
-          if (c.name === "ceramic_antenna") this.antenna.push(c);
+          c.depthWrite = c.opacity > 0.98;
           return c;
         });
         o.material = Array.isArray(o.material) ? list : list[0];
@@ -158,6 +165,21 @@ export class Disc3D {
       }
       if (!point) throw new Error(`disc.glb has no anchor for ${key}`);
       this.points.set(key, point);
+    }
+
+    // the rings of "The app": one circle of radius 1 in the plane of the disc, half way up it, scaled as it goes out
+    const circle = new LineGeometry();
+    const pts: number[] = [];
+    for (let i = 0; i <= 128; i++) pts.push(Math.cos((i / 128) * 2 * Math.PI), 0, Math.sin((i / 128) * 2 * Math.PI));
+    circle.setPositions(pts);
+    for (let k = 0; k < WAVES; k++) {
+      const m = new LineMaterial({ color: 0xffffff, linewidth: 1, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+      const ring = new Line2(circle, m);
+      ring.position.y = H / 2;
+      ring.renderOrder = 3;
+      ring.visible = false;
+      this.body.add(ring);
+      this.waves.push(ring);
     }
   }
 
@@ -210,6 +232,7 @@ export class Disc3D {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    for (const ring of this.waves) (ring.material as LineMaterial).resolution.set(width, height);
     this.dirty = true;
   }
 
@@ -228,17 +251,25 @@ export class Disc3D {
       else spring(sp, to, dt, w);
       if (sp.x !== to || sp.v !== 0) moving = true;
     };
-    for (const s of Object.keys(this.hover) as Section[]) step(this.hover[s], this.target === s ? 1 : 0, 9);
+    for (const s of Object.keys(this.hover) as Section[]) step(this.hover[s], this.target === s ? 1 : 0, HOVER_RATE[s]);
     const aim = rest && this.aim && !still ? this.aim : { x: 0, y: 0 };
     step(this.tiltX, aim.x, 4);
     step(this.tiltY, aim.y, 4);
     step(this.leave, this.towards ? 1 : 0, 7);
+    // the rings keep going out while "The app" is pointed at
+    if (this.hover.app.x > 0.001 && !still) {
+      this.waveTime += dt;
+      moving = true;
+    }
     if (!moving) return false;
 
     const h = Object.fromEntries(Object.entries(this.hover).map(([k, sp]) => [k, clamp01(sp.x)])) as Record<Section, number>;
+    // "How it's worn" turns the disc over to its watch side, then lifts the pad off it
+    const turn = smooth01(h.wear / 0.65);
+    const padOff = smooth01((h.wear - 0.45) / 0.55);
     const p = pose(b);
-    p.yaw += (OPENED.yaw - REST.yaw) * h.open + this.tiltX.x * 6;
-    p.tilt += (OPENED.tilt - REST.tilt) * h.open + this.tiltY.x * 4;
+    p.yaw += (OPENED.yaw - REST.yaw) * h.open + 18 * Math.sin(Math.PI * turn) + this.tiltX.x * 6;
+    p.tilt += (OPENED.tilt - REST.tilt) * h.open + 180 * turn + this.tiltY.x * 4;
     p.scale *= 1 + (OPENED.scale / REST.scale - 1) * h.open;
 
     // the parts: apart in the exploded view, and what the hover does to them
@@ -249,14 +280,9 @@ export class Disc3D {
       if (def) {
         lift = def.lift * Math.max(apart(b, def.step), OPENED_LIFT * h.open);
         sum += lift;
-        if (name === "pad") lift += PAD_OFF * h.wear;
+        if (name === "pad") lift += PAD_OFF * padOff;
       }
       part.node.position.y = lift;
-      const xray = XRAY.includes(name) ? 1 - 0.82 * h.app : 1;
-      for (const m of part.mats) {
-        m.opacity = m.userData.opacity * xray;
-        m.depthWrite = m.opacity > 0.98;
-      }
     }
 
     // The LEDs light once as the disc closes; "What it measures" lights them and the green shows in the window.
@@ -269,9 +295,14 @@ export class Disc3D {
       m.emissive.copy(GREEN);
       m.emissiveIntensity = glow * 0.22;
     }
-    for (const m of this.antenna) {
-      m.emissive.copy(LUME);
-      m.emissiveIntensity = h.app * 1.4;
+    // "The app": each ring fades in as it leaves the rim and out as it goes, and they follow one another round
+    for (let k = 0; k < WAVES; k++) {
+      const u = (this.waveTime / WAVE_PERIOD + k / WAVES) % 1;
+      const o = h.app * Math.min(1, u / 0.08) * (1 - u) * (1 - u);
+      const ring = this.waves[k];
+      ring.visible = o > 0.004;
+      ring.scale.setScalar(R + 0.8 + WAVE_REACH * easeOut(u));
+      (ring.material as LineMaterial).opacity = 0.85 * o;
     }
 
     // The middle of the stack stays in the middle of the drawing: the shell moves up as the parts behind it move away.
@@ -311,3 +342,7 @@ const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
 const q1 = new THREE.Quaternion();
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+const smooth01 = (x: number) => {
+  const s = clamp01(x);
+  return s * s * (3 - 2 * s);
+};

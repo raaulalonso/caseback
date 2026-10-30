@@ -51,7 +51,6 @@ export const en = {
         ],
         art: {
           label: "Drawing of the back of a watch. The disc, in 3D, comes up to the caseback and stays on it.",
-          caption: "The disc is the 3D model of the current design; the watch is drawn.",
           labels: [
             { key: "caseback", name: "Watch caseback" },
             { key: "pad", name: "Microsuction pad", value: "Ø 23 mm" },
@@ -61,19 +60,18 @@ export const en = {
         },
       },
       {
-        title: "Charged on the watch",
+        title: "Charged on its base",
         body: [
-          "It charges without coming off: the watch lies dial up on the charger and the disc clicks into it. A hook and a sprung latch go into two pockets in the rim of the disc and hold it down on two spring pins, which touch the two steel contacts on its skin face.",
-          "A button on the rim of the charger lets it out. The charger takes USB-C and has no magnet. The same click works with the disc on its own or in the band.",
+          "The disc clicks into the charging base skin face down. A hook and a sprung latch go into two pockets in its rim and hold it down on two spring pins, which touch the two steel contacts on that face.",
+          "A button on the rim of the base lets it out. The base takes USB-C and has no magnet. The disc does not have to come off the watch to charge: the watch lies dial up on the base and the disc clicks in the same way, and so it does in the band.",
         ],
         art: {
-          label: "Drawing of a watch lying dial up that comes down onto the charger, also drawn, until the disc on its back, in 3D, clicks into it.",
-          caption: "The disc is the 3D model of the current design; the watch and the charger are drawn.",
+          label: "Drawing of the charging base seen from above. The disc, in 3D, comes down into its dish and clicks in.",
           labels: [
-            { key: "watch", name: "Watch, dial up" },
             { key: "disc", name: "Disc, clicked in" },
+            { key: "latch", name: "Sprung latch" },
             { key: "button", name: "Release button" },
-            { key: "charger", name: "Charger", value: "Ø 34 mm" },
+            { key: "charger", name: "Charging base", value: "Ø 34 mm" },
           ],
         },
       },
@@ -85,7 +83,6 @@ export const en = {
         ],
         art: {
           label: "Drawing of the band standing on its edge. The disc, in 3D, goes into the holder from the inside of the loop.",
-          caption: "The disc is the 3D model of the current design; the band is drawn.",
           labels: [
             { key: "buckle", name: "Steel buckle" },
             { key: "holder", name: "Silicone holder" },
