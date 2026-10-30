@@ -3,7 +3,7 @@
 Headless:
     blender -b --python generate_mock.py -- --out ../print
 
-It reuses the real shell and lid of generate_disc.py (same outline, wall, floor, windows, contact holes, key notch, ribs,
+It reuses the real shell and lid of generate_disc.py (same outline, wall, floor, windows, contact holes, rim pockets, ribs,
 pad recess, 3.0 mm + 0.1 mm of pad) and changes only what a 0.4 mm nozzle cannot make:
 
 * the skirt of the lid is 0.46 mm thick instead of 0.36, and it sits 0.06 mm inside the wall. Bambu Studio calls a bead on a wall that is
@@ -13,7 +13,8 @@ pad recess, 3.0 mm + 0.1 mm of pad) and changes only what a 0.4 mm nozzle cannot
   cut for the biggest one, 0.15 mm deep (the wall keeps 0.65 mm there);
 * the name and the mark are left out: their lines are 0.07 to 0.09 mm wide;
 * the face of the lid is dead flat (no pad recess, no rounded edge): face down on the bed, the 17 mm recess was a bridge over nothing. The pad
-  stand-in is taped to the flat face and stands 0.4 mm proud instead of 0.1.
+  stand-in is taped to the flat face and stands 0.4 mm proud instead of 0.1;
+* it keeps the edges and the pad of the first 25 mm model (see EDGE_* and R_RECESS below), not those of the final design.
 
 The lids are written upside down (face on the bed) so that they print without support; the shell is printed skin face down.
 
@@ -40,6 +41,11 @@ sys.path.insert(0, HERE)
 import generate_disc as gd  # noqa: E402
 
 g, B = gd.g, gd.B
+
+# The printable mock is the first 25 mm model (D53): edge radii 0.5 mm on the skin side and a sharp inside corner, a flat lid face, a 16.9 mm
+# pad stand-in. The final design of the disc (D54: edges of 1.2 and 0.6 mm, a 23 mm pad, the name and the mark on the skin face) is not for
+# printing, so the values are set here and the mock does not follow generate_disc.py when that changes.
+gd.EDGE_SKIN, gd.EDGE_LID, gd.EDGE_IN, gd.R_RECESS = 0.5, 0.3, 0.0, 8.5
 
 OUT = os.path.join(HERE, "..", "print")
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -114,16 +120,17 @@ def clear_scene():
 
 
 def mock_puck(M):
-    """Body of the puck with the key joined, and the base plate, as STL files ready to print."""
+    """Body of the puck with the hook joined, and the base plate, as STL files ready to print (the latch, its spring and the button
+    are not printed)."""
     gd.ENGRAVE = False
     gd.build_puck(M)
     coll = gd.g.collection(gd.COLL_PUCK)
-    body, key = bpy.data.objects["Puck_body"], bpy.data.objects["Puck_key"]
-    # the key stands on the floor of the dish: lower its foot a little so that it overlaps the floor and the union has no shared face
-    for v in key.data.vertices:
-        if v.co.z < gd.P_FLOOR + 0.1:
-            v.co.z = gd.P_FLOOR - 0.05
-    gd.bool_union(body, [key])
+    body, hook = bpy.data.objects["Puck_body"], bpy.data.objects["Puck_hook"]
+    # the hook stands out of the dish wall: push its outer face a little into the wall so that the union has no shared face
+    for v in hook.data.vertices:
+        if v.co.y > gd.DISH_R:
+            v.co.y = gd.DISH_R + 0.4
+    gd.bool_union(body, [hook])
     report = {}
     report["puck_body"] = write_stl(body, os.path.join(OUT, "caseback_mock_puck_body.stl"))
     report["puck_plate"] = write_stl(bpy.data.objects["Puck_base_plate"], os.path.join(OUT, "caseback_mock_puck_plate.stl"))

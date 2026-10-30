@@ -9,12 +9,13 @@ product or service that does the same job as Caseback. Each version becomes Apac
 * hardware/
 * firmware/, except the three protocol files named below
 * apps/, except apps/ios/CasebackProtocol/
+* web/public/models/, the 3D model of the disc made from hardware/mechanical by scripts/export_web.py
 
 Open source: Apache-2.0 (LICENSE-SOFTWARE). Everything not listed in this notice, and in particular:
 * caseback-protocol/ and its other implementations: apps/ios/CasebackProtocol/ and, in firmware/caseback-fw,
   src/protocol.c, include/protocol.h and tests/test_protocol.c
 * algorithms/
-* tools/, tests/ and web/
+* tools/, tests/ and web/, except web/public/models/
 
 Open source: CC-BY-SA-4.0 (LICENSE-DOCS)
 * the Markdown documents at the root of the repository

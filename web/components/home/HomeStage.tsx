@@ -3,39 +3,39 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { fieldPaths } from "@/lib/blobs/field";
-import { BlobSim, METRICS, discTarget, type Target } from "@/lib/blobs/sim";
-import type { Dict, Locale } from "@/lib/i18n";
-import { Back, DiscEtching, DiscMark, Front, SideView } from "./Drawing";
-import { CALLOUTS, R_CASE, R_DISC, R_KNURL_IN, VIEW, leaderPoints } from "./geometry";
-import { T, at, easeInOut, introAt } from "./timeline";
+import type { Dict, Locale, Section } from "@/lib/i18n";
+import type { Disc3D } from "./disc3d";
+import { Front, SideView } from "./Drawing";
+import { CALLOUTS, VIEW, leaderPoints } from "./geometry";
+import { B, T, at, introAt } from "./timeline";
 
 const SEEN_KEY = "caseback-intro-seen";
-/** The blobs are laid out a little wider than the disc and clipped to it, so the fused field fills it edge to edge. */
-const LAYOUT_R = R_DISC * 1.2;
-const FILL = 1.2; // blobs a little larger than their layout, so no black shows at the rim
-const UNIT = 2; // drawing units per app point
-const K = 46; // neck of the smooth union
+const MODEL = "/models/disc.glb";
+/** How long the drawn watch waits for the disc model before the sections come in without it. */
+const WAIT = 8;
 const BOX = `${-VIEW} ${-VIEW} ${2 * VIEW} ${2 * VIEW}`;
 
-type Run = "pending" | "intro" | "done";
+type Run = "pending" | "intro" | "build" | "done";
 
 export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
   const overRef = useRef<SVGSVGElement>(null);
-  const secondRef = useRef<SVGGElement>(null);
-  const pathRefs = useRef<(SVGPathElement | null)[]>([]);
-  const hoverRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const discRef = useRef<Disc3D | null>(null);
+  const lineRefs = useRef<(SVGPolylineElement | null)[]>([]);
+  const nodeRefs = useRef<(SVGCircleElement | null)[]>([]);
   const skipRef = useRef<() => void>(() => {});
   const [run, setRun] = useState<Run>("pending");
+  const [ready, setReady] = useState(false);
+  const [fallback, setFallback] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
   const [leaving, setLeaving] = useState(false);
   // 10:10:30 until the browser says what time it is.
   const [hands, setHands] = useState({ h: 305, m: 60, s: 180 });
 
   useEffect(() => {
-    hoverRef.current = hover;
+    discRef.current?.setHover(hover === null ? null : CALLOUTS[hover].key);
   }, [hover]);
 
   // Line weights stay the same on screen whatever the size of the drawing: each SVG gets --px, drawing units per pixel.
@@ -55,11 +55,14 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
   }, []);
 
   useEffect(() => {
+    const canvas = canvasRef.current!;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let seen = false;
     try {
       seen = sessionStorage.getItem(SEEN_KEY) === "1" && !/[?&]intro/.test(location.search);
     } catch {}
+    // Development only: ?t=4.2 holds the intro at 4.2 s on the first clock, for screenshots.
+    const hold = process.env.NODE_ENV !== "production" ? Number(new URLSearchParams(location.search).get("t") ?? NaN) : NaN;
     const now = new Date();
     setHands({
       h: ((now.getHours() % 12) + now.getMinutes() / 60) * 30,
@@ -67,49 +70,67 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
       s: now.getSeconds() * 6,
     });
 
-    const sim = new BlobSim(METRICS.length, UNIT, 240);
-    const place = (time: number, grow: (i: number) => number) =>
-      METRICS.forEach((_, i) => {
-        const d = discTarget(i, time, 0, 0, LAYOUT_R);
-        const g = grow(i);
-        sim.place(i, d.x * g, d.y * g, d.r * g * FILL);
-      });
-    const draw = (time: number) => {
-      const paths = fieldPaths(sim.shapes(), { k: K, step: 5, time, unit: UNIT });
-      paths.forEach((d, i) => pathRefs.current[i]?.setAttribute("d", d));
-    };
-    const setSecond = (date: Date) => {
-      // Seen from the back, the seconds run anticlockwise.
-      secondRef.current?.setAttribute("transform", `rotate(${-date.getSeconds() * 6})`);
-    };
-
     // On a phone (the layout of the media query in globals.css) only the central drawing plays; the intro ends with it.
     const compact = window.matchMedia("(max-width: 1100px), (max-aspect-ratio: 1/1)").matches;
-    const END = compact ? T.doneCompact : T.done;
-    let settled = reduced || seen;
-    const finish = (time: number) => {
+    const END = compact ? B.doneCompact : B.done;
+    let settled = (reduced || seen) && isNaN(hold);
+    // The disc fades in when it first shows at rest: back on the page from a section, or after a skip.
+    let fade = settled;
+    const finish = (skipped = false) => {
       settled = true;
-      place(time, () => 1);
+      fade ||= skipped;
       setRun("done");
       try {
         sessionStorage.setItem(SEEN_KEY, "1");
       } catch {}
     };
-    if (settled) {
-      setRun("done");
-      place(0, () => 1);
-      draw(0);
-      setSecond(new Date());
-      if (reduced) return;
-    }
+    if (settled) setRun("done");
+
+    // The disc model loads while the watch draws itself; the watch turns over once it is there.
+    let disc: Disc3D | null = null;
+    let failed = false;
+    let disposed = false;
+    const fit = () => {
+      const r = canvas.getBoundingClientRect();
+      if (disc && r.width > 0) disc.resize(r.width, r.height);
+    };
+    import("./disc3d")
+      .then((m) => m.Disc3D.load(canvas, MODEL))
+      .then((d) => {
+        if (disposed) return d.dispose();
+        disc = discRef.current = d;
+        fit();
+      })
+      .catch(() => {
+        failed = true;
+        setFallback(true);
+      });
+    const ro = new ResizeObserver(fit);
+    ro.observe(canvas);
+    // Nothing is drawn while the drawing is scrolled off (phones) or the tab is hidden.
+    let onScreen = true;
+    const io = new IntersectionObserver(([e]) => (onScreen = e.isIntersecting));
+    io.observe(canvas);
+
+    // Leaders leave from the parts wherever the 3D scene has put them.
+    const follow = (d: Disc3D) => {
+      const a = d.anchors();
+      CALLOUTS.forEach((c, i) => {
+        const pts = leaderPoints(c, a[c.key]).map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+        lineRefs.current[2 * i]?.setAttribute("points", pts);
+        lineRefs.current[2 * i + 1]?.setAttribute("points", pts);
+        nodeRefs.current[i]?.setAttribute("cx", a[c.key][0].toFixed(1));
+        nodeRefs.current[i]?.setAttribute("cy", a[c.key][1].toFixed(1));
+      });
+    };
 
     let raf = 0;
     let start = 0;
     let last = 0;
-    let lastBeat = 0;
-    let lastSecond = -1;
+    let built: number | null = null; // performance.now() when the second clock started
+    let shown = false;
     skipRef.current = () => {
-      if (!settled) finish((performance.now() - start) / 1000);
+      if (!settled) finish(true);
     };
 
     const frame = (nowMs: number) => {
@@ -117,58 +138,52 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
         start = last = nowMs;
         if (!settled) setRun("intro");
       }
-      const dt = Math.min(0.033, (nowMs - last) / 1000);
+      const dt = Math.min(0.05, (nowMs - last) / 1000);
       last = nowMs;
-      const time = (nowMs - start) / 1000;
+      const time = isNaN(hold) ? (nowMs - start) / 1000 : hold;
 
-      let growing = false;
       if (!settled) {
-        if (time >= END) finish(time);
-        else if (time < T.disc + 1.1) {
-          // The blobs grow from the middle of the disc, one after another, and fuse as they grow.
-          growing = true;
-          place(time, (i) => easeInOut(introAt(time, T.disc + i * 0.05, 0.75)));
-        }
+        if (built === null) {
+          if (time >= T.flip && disc) {
+            built = nowMs - Math.max(0, time - T.flip) * 1000;
+            setRun("build");
+          } else if (failed || time >= T.flip + WAIT) finish(); // no 3D: the watch stays and the sections come in
+        } else if ((isNaN(hold) ? (nowMs - built) / 1000 : hold - T.flip) >= END) finish();
       }
-      if (!growing) {
-        const h = hoverRef.current;
-        const targets: Target[] = METRICS.map((_, i) => {
-          const d = discTarget(i, time, 0, 0, LAYOUT_R);
-          d.r *= FILL;
-          if (h !== null && CALLOUTS[h].blob === i) d.r *= 1.18;
-          return { ...d, wobble: 0.05 };
-        });
-        sim.step(dt, targets, 0);
-        if (nowMs - lastBeat > 1000) {
-          lastBeat = nowMs; // 60 beats a minute on the heart-rate blob
-          sim.beat = 1;
-        }
-      }
-      if (settled || time >= T.disc) draw(time);
+      const b = settled ? Infinity : built === null ? -1 : isNaN(hold) ? (nowMs - built) / 1000 : hold - T.flip;
+      if (!isNaN(hold) && !settled) holdCss(built === null ? time : b);
 
-      const d = new Date();
-      if (d.getSeconds() !== lastSecond) {
-        lastSecond = d.getSeconds();
-        setSecond(d);
+      if (disc && b >= 0 && onScreen && disc.frame(b, dt, reduced)) {
+        follow(disc);
+        if (!settled) {
+          // from the moment the dial is edge-on, in the time of about six frames
+          canvas.style.transition = "none";
+          canvas.style.opacity = String(introAt(b, B.turnDur / 2, 0.1));
+        } else if (fade) {
+          fade = false;
+          canvas.style.transition = "none";
+          canvas.style.opacity = "0";
+          void canvas.offsetWidth;
+          canvas.style.transition = "opacity 0.7s var(--ease)";
+          canvas.style.opacity = "1";
+        } else canvas.style.opacity = "1";
+        if (!shown) {
+          shown = true;
+          setReady(true);
+        }
       }
       raf = requestAnimationFrame(frame);
     };
 
-    const toUnits = (e: PointerEvent) => {
+    const toBox = (e: PointerEvent) => {
       const r = overRef.current?.getBoundingClientRect();
       if (!r || !r.width) return null;
-      return { x: ((e.clientX - r.left) / r.width) * 2 * VIEW - VIEW, y: ((e.clientY - r.top) / r.height) * 2 * VIEW - VIEW };
+      return { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: ((e.clientY - r.top) / r.height) * 2 - 1 };
     };
     const onMove = (e: PointerEvent) => {
-      if (settled && e.pointerType !== "touch") sim.pointer = toUnits(e);
+      if (settled && e.pointerType !== "touch") disc?.setPointer(toBox(e));
     };
-    const onLeave = () => (sim.pointer = null);
-    const onDown = (e: PointerEvent) => {
-      if (settled && e.pointerType === "touch") sim.pointer = toUnits(e);
-    };
-    const onUp = (e: PointerEvent) => {
-      if (e.pointerType === "touch") sim.pointer = null;
-    };
+    const onLeave = () => disc?.setPointer(null);
     const onKey = (e: KeyboardEvent) => {
       if (!settled && e.key === "Escape") skipRef.current();
     };
@@ -184,29 +199,32 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
 
     raf = requestAnimationFrame(frame);
     window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerdown", onDown);
-    window.addEventListener("pointerup", onUp);
     document.documentElement.addEventListener("pointerleave", onLeave);
     window.addEventListener("keydown", onKey);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      disposed = true;
       cancelAnimationFrame(raf);
+      ro.disconnect();
+      io.disconnect();
+      disc?.dispose();
+      discRef.current = null;
       window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerdown", onDown);
-      window.removeEventListener("pointerup", onUp);
       document.documentElement.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
-  const open = (e: React.MouseEvent, href: string) => {
+  // On the way to a section the camera closes in on the part the line leaves from while the page fades.
+  const open = (e: React.MouseEvent, href: string, key: Section) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
     e.preventDefault();
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return router.push(href);
     setLeaving(true);
+    discRef.current?.goTo(key);
     router.prefetch(href);
-    window.setTimeout(() => router.push(href), 240);
+    window.setTimeout(() => router.push(href), 480);
   };
 
   return (
@@ -214,46 +232,28 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
       ref={rootRef}
       className="home"
       data-run={run}
+      data-ready={ready ? "" : undefined}
+      data-fallback={fallback ? "" : undefined}
       data-hover={hover === null ? undefined : CALLOUTS[hover].key}
       data-leaving={leaving ? "" : undefined}
     >
       <div className="seal">
-        <div className="card a-flip" style={at(T.flip, T.flipDur)}>
+        <div className="card a-flip" style={at(B.turn, B.turnDur)}>
           <svg className="face face-front" viewBox={BOX} data-w={2 * VIEW} aria-hidden>
             <Front hands={hands} />
           </svg>
-          <svg className="face face-back" viewBox={BOX} data-w={2 * VIEW} aria-hidden>
-            <Back />
-          </svg>
         </div>
+        <canvas ref={canvasRef} className="disc3d" aria-hidden />
         <svg ref={overRef} className="over" viewBox={BOX} data-w={2 * VIEW} role="img" aria-label={t.home.drawing}>
-          <defs>
-            <clipPath id="disc-clip">
-              <circle r={R_DISC} />
-            </clipPath>
-          </defs>
-          <DiscMark />
-          <g className="disc a-land" style={at(T.land, T.landDur)}>
-            <circle className="disc-body a-fade" r={R_DISC} style={at(T.disc, 0.6)} />
-            <g clipPath="url(#disc-clip)">
-              {METRICS.map((m, i) => (
-                <path key={m.key} ref={(el) => { pathRefs.current[i] = el; }} fill={m.color} fillRule="evenodd" stroke="#000" strokeWidth={3.5} strokeLinejoin="round" paintOrder="stroke" />
-              ))}
-            </g>
-            <DiscEtching />
-          </g>
-          <g ref={secondRef} className="second">
-            <line className="ln w15" x1={0} y1={-R_KNURL_IN - 3} x2={0} y2={-R_CASE + 3} />
-          </g>
-          <g className="leaders">
+          <g className="leaders late">
             {CALLOUTS.map((c, i) => {
               const pts = leaderPoints(c).map((p) => p.join(",")).join(" ");
-              const start = T.callouts + i * 0.1;
+              const start = B.callouts + i * 0.1;
               return (
                 <g key={c.key} className={`leader${hover === i ? " on" : ""}`}>
-                  <polyline className="leader-line a-draw" points={pts} pathLength={1} style={at(start, 0.55)} />
-                  <polyline className="leader-hot" points={pts} pathLength={1} />
-                  <circle className="node a-pop" cx={c.anchor[0]} cy={c.anchor[1]} r={4.5} style={at(start, 0.3)} />
+                  <polyline ref={(el) => { lineRefs.current[2 * i] = el; }} className="leader-line a-draw" points={pts} pathLength={1} style={at(start, 0.55)} />
+                  <polyline ref={(el) => { lineRefs.current[2 * i + 1] = el; }} className="leader-hot" points={pts} pathLength={1} />
+                  <circle ref={(el) => { nodeRefs.current[i] = el; }} className="node a-pop" cx={c.anchor[0]} cy={c.anchor[1]} r={4.5} style={at(start, 0.3)} />
                 </g>
               );
             })}
@@ -261,7 +261,7 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
         </svg>
       </div>
 
-      <nav className="callouts" aria-label={t.nav.sections}>
+      <nav className="callouts late" aria-label={t.nav.sections}>
         <ol>
           {CALLOUTS.map((c, i) => {
             const end = leaderPoints(c)[2];
@@ -270,12 +270,12 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
             return (
               <li
                 key={c.key}
-                className={`callout callout-${c.side}`}
-                style={{ "--x": end[0], "--y": end[1], ...at(T.callouts + i * 0.1 + 0.45, 1.1) } as CSSProperties}
+                className={`callout callout-${c.side} callout-key-${c.key}`}
+                style={{ "--x": end[0], "--y": end[1], ...at(B.callouts + i * 0.1 + 0.45, 1.1) } as CSSProperties}
               >
                 <Link
                   href={href}
-                  onClick={(e) => open(e, href)}
+                  onClick={(e) => open(e, href, c.key)}
                   onPointerEnter={() => setHover(i)}
                   onPointerLeave={() => setHover(null)}
                   onFocus={() => setHover(i)}
@@ -303,3 +303,13 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
     </div>
   );
 }
+
+/** Development only: puts every CSS animation of the intro at `time` seconds on its clock (see `hold`). */
+function holdCss(time: number) {
+  for (const a of document.getAnimations()) {
+    if (!(a instanceof CSSAnimation)) continue;
+    a.pause();
+    a.currentTime = time * 1000;
+  }
+}
+

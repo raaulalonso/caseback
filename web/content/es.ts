@@ -32,12 +32,12 @@ export const es: typeof en = {
     },
     status: "Fase de prototipo",
     drawing:
-      "Dibujo de un reloj visto desde el lado de la muñeca. En su tapa hay un disco redondo hecho de siete formas de colores. De partes del disco salen líneas hacia las secciones de esta web.",
+      "Dibujo de un reloj que se da la vuelta y se convierte en el disco, en 3D: sus piezas bajan una a una dentro de la carcasa y el disco cerrado se gira hacia la cara de la piel. De partes del disco salen líneas hacia las secciones de esta web.",
     callouts: {
       wear: { label: "Cómo se lleva", part: "Almohadilla de microsucción" },
       measure: { label: "Qué mide", part: "Ventana del sensor" },
       app: { label: "La app", part: "Antena Bluetooth" },
-      open: { label: "Código y licencias", part: "Tornillo de la tapa" },
+      open: { label: "Código y licencias", part: "Junta entre carcasa y tapa" },
     },
   },
   wear: {

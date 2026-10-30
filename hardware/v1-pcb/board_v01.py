@@ -58,7 +58,11 @@ R_DISC = 12.5                 # 25 mm across
 R_CAV = 11.7                  # inside radius of the shell wall: 0.8 mm of wall
 R_BOARD = 11.2                # the snap skirt of the lid is 0.1 mm outside it (inside radius 11.3)
 R_PART = 10.7                 # parts stay inside this radius; the shell ledges that carry the board edge start at 10.85
-R_RECESS = 8.5                # microsuction recess, Ø17. A curved caseback leaves a gap r^2 / 2R under the pad edge: 0.14 mm at R 55
+R_RECESS = 11.5               # microsuction recess, Ø23 (D54): the pad is the whole watch-side face up to the rounded rim. A curved caseback leaves
+                              # a gap r^2 / 2R under the pad edge: 0.12 mm at R 500, 0.66 mm at R 100
+EDGE_SKIN = 1.2               # radius of the outer edge on the skin side (D54; 0.5 before): the edge that presses on the wrist
+EDGE_LID = 0.6                # radius of the outer edge on the watch side (0.3 before)
+EDGE_IN = 0.4                 # radius of the inside corner between floor and wall: keeps the shell as thick as the floor behind the big outer radius
 CHORD_Y = 3.2                 # the board is cut away for y >= CHORD_Y: the cell lies there
 _XC = math.sqrt(R_BOARD ** 2 - CHORD_Y ** 2)
 CELL_CUT = (-_XC, CHORD_Y, _XC)           # the ends of the chord on the board edge (kept as x0, y0, x1 for the older callers)
@@ -73,7 +77,9 @@ CONTACT_SLUG_D = 2.2          # 316L rivet-shaped slug through the shell floor, 
 SLUG_HEAD_D = 3.0             # its head sits inside the cavity, so the spring cannot push it out through the floor
 SLUG_HEAD_T = 0.10
 CONTACT_FREE_H = 1.25         # spring contact before it is pressed; it works compressed to the part height below
-NOTCH_W = 3.0                 # key notch in the outer wall at -Y, for the key of the charger
+POCKET_W = (4.6, 3.0)         # two pockets in the outer wall near the skin face: at -Y for the latch of the charger, at +Y for its fixed hook;
+POCKET_Z = (0.8, 1.25)        # different widths, so the disc goes into the charger one way only. Their floors are the ledges the charger
+POCKET_DEPTH = 0.4            # holds the disc down by
 
 
 @dataclass
@@ -335,11 +341,59 @@ def checks():
     add("diameter", 2 * R_DISC <= 25.0 + 1e-9, f"{2 * R_DISC:.1f} mm")
     add("wall", R_DISC - R_CAV >= 0.8 - 1e-9, f"{R_DISC - R_CAV:.2f} mm")
     add("pad stands proud of the lid face", PAD_FOAM_T - PAD_T >= 0.1 - 1e-9, f"{PAD_FOAM_T - PAD_T:.2f} mm")
-    add("lettering ring on the lid", R_DISC - R_RECESS >= 3.5, f"{R_DISC - R_RECESS:.1f} mm between the pad and the rim")
+    add("pad stays on the flat of the lid face", R_RECESS <= R_DISC - EDGE_LID - 0.3 + 1e-9, f"pad recess r {R_RECESS}, flat face to r {R_DISC - EDGE_LID:.1f}, so {R_DISC - EDGE_LID - R_RECESS:.1f} mm of flat shoulder")
+    add("charge slugs on the flat of the skin face", max(math.hypot(x, y) for x, y in CONTACTS) + CONTACT_SLUG_D / 2 <= R_DISC - EDGE_SKIN - 0.5 + 1e-9,
+        f"slug edge at {max(math.hypot(x, y) for x, y in CONTACTS) + CONTACT_SLUG_D / 2:.2f} mm, the flat ends at {R_DISC - EDGE_SKIN:.1f}")
+    thin, where = shell_min_wall()
+    z0 = POCKET_Z[0]
+    ledge = (R_DISC - EDGE_SKIN + math.sqrt(EDGE_SKIN ** 2 - (EDGE_SKIN - z0) ** 2)) - (R_DISC - POCKET_DEPTH)
+    add("pocket floor is a ledge the charger can hold", ledge >= 0.3, f"{ledge:.2f} mm of ledge at z = {z0} (outer radius there minus the pocket floor at r {R_DISC - POCKET_DEPTH})")
+    add("wall behind the pockets", R_DISC - POCKET_DEPTH - R_CAV >= FLOOR - 1e-9 and z0 >= FLOOR + EDGE_IN - 1e-9,
+        f"{R_DISC - POCKET_DEPTH - R_CAV:.2f} mm, the pockets start at z = {z0}, above the inside corner")
+    add("pockets under the board", POCKET_Z[1] <= PCB_Z0 - 0.1, f"pockets up to z = {POCKET_Z[1]}, board from {PCB_Z0}")
+    add("shell as thick as its floor round the skin edge", thin >= FLOOR - 1e-3, f"thinnest {thin:.2f} mm at r {where[0]:.2f}, z {where[1]:.2f} (outer radius {EDGE_SKIN}, inside corner {EDGE_IN})")
     mah = cell_mah()
     add("cell capacity", mah >= 7.0, f"about {mah:.1f} mAh from the outline {poly_area(CELL_POLY):.0f} mm2 x {CELL_T} mm (estimate at 200 Wh/L)")
     add("skin floor", FLOOR >= 0.4, f"{FLOOR} mm (the SLS rule of 0.6 mm is not met, open since D2)")
     return rows
+
+
+def shell_profile_outer():
+    """Outer outline of the shell from the middle of the skin face to the top of the wall, as (r, z) points: flat face, the skin-side
+    edge radius, then the wall."""
+    pts = [(0.0, 0.0)]
+    pts += [(R_DISC - EDGE_SKIN + EDGE_SKIN * math.cos(math.radians(a)), EDGE_SKIN + EDGE_SKIN * math.sin(math.radians(a))) for a in range(-90, 1, 5)]
+    pts.append((R_DISC, LID_IN))
+    return pts
+
+
+def shell_profile_inner():
+    """Inside of the shell at the bottom: the wall, the inside corner radius and the floor, as (r, z) points."""
+    pts = [(R_CAV, FLOOR + EDGE_IN + 0.6)]
+    pts += [(R_CAV - EDGE_IN + EDGE_IN * math.cos(math.radians(a)), FLOOR + EDGE_IN + EDGE_IN * math.sin(math.radians(a))) for a in range(0, -91, -5)]
+    pts.append((0.0, FLOOR))
+    return pts
+
+
+def shell_min_wall():
+    """Thinnest part of the shell's material round the skin-side corner: the distance from the inside outline to the outside outline.
+    Returns (thickness, (r, z) of the inside point where it is smallest)."""
+    outer = shell_profile_outer()
+
+    def dist(p, a, b):
+        ax, az = a
+        bx, bz = b
+        dx, dz = bx - ax, bz - az
+        t = max(0.0, min(1.0, ((p[0] - ax) * dx + (p[1] - az) * dz) / (dx * dx + dz * dz)))
+        return math.hypot(p[0] - (ax + t * dx), p[1] - (az + t * dz))
+
+    inner = shell_profile_inner()
+    dense = []
+    for a, b in zip(inner, inner[1:]):
+        n = 10
+        dense += [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n) for k in range(n)]
+    best = min(((min(dist(p, a, b) for a, b in zip(outer, outer[1:])), p) for p in dense), key=lambda t: t[0])
+    return best
 
 
 def poly_area(pts) -> float:
@@ -393,7 +447,7 @@ def draw_board(side: str, scale: float = 34.0) -> str:
     s += f'<circle cx="{cx}" cy="{cy}" r="{R_CAV * scale}" fill="none" stroke="#9a968c" stroke-width="1" stroke-dasharray="6 5"/>\n'
     s += f'<circle cx="{cx}" cy="{cy}" r="{R_RECESS * scale}" fill="none" stroke="#b9b5a8" stroke-width="1" stroke-dasharray="2 4"/>\n'
     if side == "watch":
-        s += f'<text x="{cx}" y="{cy + R_RECESS * scale - 6}" font-size="12" fill="#a29e92" text-anchor="middle">microsuction pad, diameter {2 * R_RECESS:g}</text>\n'
+        s += f'<text x="{cx}" y="{cy + (R_RECESS + (R_DISC - R_RECESS) / 2) * scale + 4:.1f}" font-size="11" fill="#7c786d" text-anchor="middle">microsuction pad, diameter {2 * R_RECESS:g}</text>\n'   # in the gap between the pad and the rim, where the board does not cover it
 
     # board
     pts = board_polygon()

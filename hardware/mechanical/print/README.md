@@ -45,8 +45,10 @@ The 0.4 mm nozzle cannot make a few things, so the mock changes only those:
 | Bead 0.10 mm, 60° return flank | 0.09, 0.12 or 0.15 mm, 45° on both flanks | 45° is the flank that was checked in the slicer; the real 60° one has not been tried on a printed wall |
 | Groove in the wall 0.10 mm deep | 0.15 mm, for the biggest bead (the wall keeps 0.65 mm) | One groove has to take all three lids |
 | Skirt tip at 1.55 mm | 1.50 mm | Room for the 45° bead |
-| CASEBACK name and mark on the lid | none | The lines are 0.07 to 0.09 mm wide |
-| Lid face with a Ø17 mm pad recess 0.3 mm deep and a rounded edge | Flat face, square edge | Printed face down, the roof of the recess is a 17 mm bridge floating 0.3 mm over the bed. A flat face is one solid layer on the bed |
+| CASEBACK name and mark on the skin face | none | The lines are 0.07 to 0.09 mm wide |
+| Lid face with a Ø23 mm pad recess 0.3 mm deep and a rounded edge of 0.6 mm | Flat face, square edge | Printed face down, the roof of the recess is a 23 mm bridge floating 0.3 mm over the bed. A flat face is one solid layer on the bed |
+| Skin-side edge radius 1.2 mm, inside corner of the shell 0.4 mm | Edge radius 0.5 mm, sharp inside corner | The mock is the model of 28 October and does not follow the final design |
+| Pad Ø23 mm | Stand-in of Ø16.9 mm | Same reason |
 
 The three lids go in against 0.03, 0.06 and 0.09 mm of interference (bead height minus the 0.06 mm of clearance). Closed, the
 bead sits in the groove and the lip lands on the wall: an exact boolean of the closed assembly gives no overlap for any of the

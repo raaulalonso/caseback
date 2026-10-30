@@ -11,9 +11,9 @@ charge contacts and the puck, is drawn here. The design and the reasons are in t
 
 25 mm across, 3.1 mm thick with the pad, no screws (D53): the lid has a thin skirt with a bead that snaps into a groove
 in the wall of the shell, over a silicone ring. The disc charges through its skin face (D52): two flush steel contacts in
-the shell floor, a puck that the watch rests on, no magnet and no steel plate. Units: 1 Blender unit = 1 mm. Z = 0 is the
-skin face, +Z goes towards the watch caseback. Seen from the watch side (+Z), x is to the right and y up; the key notch is
-on -Y, the charge contacts on the left and right.
+the shell floor, a puck the disc clicks into, no magnet and no steel plate. Units: 1 Blender unit = 1 mm. Z = 0 is the
+skin face, +Z goes towards the watch caseback. Seen from the watch side (+Z), x is to the right and y up; the wide latch pocket is
+on -Y, the hook pocket on +Y, the charge contacts on the left and right.
 """
 
 from __future__ import annotations
@@ -50,24 +50,28 @@ BEAD = 0.10                           # radial height of the bead and depth of t
 BEAD_Z = (1.66, 1.76, 1.83, 1.89)     # bead: foot of the lead-in flank, top of it (45 degrees), foot of the return flank, end of it (60 from the axis)
 GROOVE_Z = (1.58, 1.68, 1.85, 1.91)   # groove: where the wall leaves R_CAV, bottom, top of the groove, back to R_CAV
 PAD_T, R_RECESS = B.PAD_T, B.R_RECESS
-NOTCH_DEPTH, NOTCH_H = 0.4, 1.3       # key notch in the outer wall of the shell, from the skin face up
+EDGE_SKIN, EDGE_LID, EDGE_IN = B.EDGE_SKIN, B.EDGE_LID, B.EDGE_IN      # outer edge radii of the skin side and the watch side, inside corner of the shell
 WIN_GEL = 0.15                        # optical gel between the window resin and the SFH 7072 face
 LEDGE_ANGLES = ((-150.0, -130.0), (-100.0, -80.0), (-50.0, -30.0))     # three ribs that carry the board edge, on the side the board keeps
 FOOT_R = (10.9, 11.3)                 # the lid has a small foot over each rib that holds the board down (0.03 mm above it)
-ENGRAVE = True                        # name and mark on the lid ring, mark on the puck and its plate; the printable mock leaves them out
+ENGRAVE = True                        # name and mark on the skin face, mark on the puck and its plate; the printable mock leaves them out
 FLAT_FACE = False                     # the printable mock makes the face of the lid dead flat: no pad recess, no rounded edge, nothing to bridge on the bed
 
 # ------------------------------------------------------------------ the puck
 P_R, P_H = 17.0, 7.0
-DISH_R, DISH_DEPTH = 12.8, 1.2        # shallow: the disc stands 1.9 mm proud and the watch rests on it
+DISH_R, DISH_DEPTH = 12.8, 1.2        # shallow: the disc stands 1.9 mm proud on a watch, and 0.1 mm under the holder of the band
 P_FLOOR = P_H - DISH_DEPTH            # 5.8, where the skin face of the disc rests
-POGO_FREE = 0.35                      # plunger height above the dish floor when free; the watch presses it flush
+POGO_FREE = 0.35                      # plunger height above the dish floor when free; the latch holds the disc down on them
 POGO_R, POGO_PLUNGER_R = 0.5, 0.37
 PUCK_BOARD_R = 12.4                   # the puck board: a disc with a tab for the USB-C socket
 POCKET_R = 12.9
 PLATE_R = 13.3
 USB_Z = 3.03                          # height of the middle of the USB-C receptacle above the bottom of the puck
 USB_FLAT_Y = 15.9                     # the rim of the puck is cut flat here, 12 mm wide, so that the face of the receptacle sits square
+# the disc is held down by a fixed hook in the dish wall at +Y and a sprung latch at -Y, each in a pocket of the disc's rim; a button
+# on the rim at -Y pulls the latch back to let the disc out
+HOOK = dict(w=2.6, z0=B.POCKET_Z[0] + 0.05, z1=B.POCKET_Z[1] - 0.08, reach=B.POCKET_DEPTH - 0.07)    # reach: how far into the pocket
+LATCH = dict(w=4.0, travel=0.8, button_out=0.8, spring_d=1.4)
 COLL_STUDIO, COLL_PSEC = "Studio", "Puck_Section"
 
 
@@ -81,6 +85,14 @@ def box_cut(size, center, rot=0.0):
     b = g.new_bm()
     g.add_box(b, size, center, rot)
     return g.obj_from_bm("cut", b, smooth=False)
+
+
+def pocket_cuts():
+    """The two pockets in the outer wall near the skin face: the wide one at -Y takes the latch of the charger, the narrow one at +Y
+    its fixed hook. Each has a floor, the ledge the hook and the latch hold the disc down by."""
+    z0, z1 = B.POCKET_Z
+    d = B.POCKET_DEPTH
+    return [box_cut((w, d + 1.0, z1 - z0), (0.0, sy * (R - d + (d + 1.0) / 2), (z0 + z1) / 2)) for sy, w in ((-1, B.POCKET_W[0]), (1, B.POCKET_W[1]))]
 
 
 def stadium_cut(w, h, y0, y1, xc, zc, seg=24):
@@ -135,15 +147,17 @@ def join_bm(*bms):
     return out
 
 
-def arc_text_cutter(body, radius, centre_deg, size, z, depth=0.07, spacing=0.86):
-    """Letters laid along a circle of `radius`, reading left to right as seen from +Z. One mesh, ready for a boolean."""
+def arc_text_cutter(body, radius, centre_deg, size, z, depth=0.07, spacing=0.86, mirror=False, inward=False):
+    """Letters laid along a circle of `radius`, reading left to right as seen from +Z (from -Z with mirror=True, for the skin face).
+    The tops of the letters face the outside of the circle, or its centre with inward=True (text along the bottom of a face).
+    One mesh, ready for a boolean."""
     n = len(body)
     step = size * spacing / radius                                  # radians per letter
     meshes = []
     for i, ch in enumerate(body):
         if ch == " ":
             continue
-        a = radians(centre_deg) + (n - 1) / 2 * step - i * step
+        a = radians(centre_deg) + ((i - (n - 1) / 2) if inward else ((n - 1) / 2 - i)) * step
         cu = bpy.data.curves.new("ch", "FONT")
         cu.body, cu.size, cu.align_x, cu.align_y, cu.extrude = ch, size, "CENTER", "CENTER", depth
         cu.resolution_u = 12
@@ -153,7 +167,7 @@ def arc_text_cutter(body, radius, centre_deg, size, z, depth=0.07, spacing=0.86)
         me = bpy.data.meshes.new_from_object(tmp.evaluated_get(bpy.context.evaluated_depsgraph_get()))
         bpy.data.objects.remove(tmp, do_unlink=True)
         bpy.data.curves.remove(cu)
-        me.transform(Matrix.Translation((radius * cos(a), radius * sin(a), z)) @ Matrix.Rotation(a - pi / 2, 4, "Z"))
+        me.transform(Matrix.Translation((radius * cos(a), radius * sin(a), z)) @ Matrix.Rotation(a + pi / 2 if inward else a - pi / 2, 4, "Z"))
         meshes.append(me)
     ob = bpy.data.objects.new("txt_cutter", meshes[0])
     g.collection(COLL_ASM).objects.link(ob)
@@ -164,6 +178,9 @@ def arc_text_cutter(body, radius, centre_deg, size, z, depth=0.07, spacing=0.86)
     bm.free()
     for me in meshes[1:]:
         bpy.data.meshes.remove(me)
+    if mirror:                                                      # the whole line turned over: it now reads correctly from -Z
+        ob.data.transform(Matrix.Scale(-1.0, 4, (1.0, 0.0, 0.0)))
+        ob.data.flip_normals()
     return ob
 
 
@@ -295,6 +312,11 @@ def materials():
     M["pogo_spring"] = g.make_mat("pogo_spring_steel", (0.86, 0.86, 0.88), metallic=1.0, rough=0.18)
     M["wire"] = g.make_mat("wire_silicone_black", (0.012, 0.012, 0.014), rough=0.7)
     BP.materials(M)
+    # the pouch is aluminium laminate: satin silver, the folded seals a little duller; amber polyimide tape over the
+    # protection board, as on a small pouch cell
+    M["pouch"] = g.make_mat("pouch_film_silver", (0.70, 0.71, 0.74), metallic=0.8, rough=0.3)
+    M["pouch_seal"] = g.make_mat("pouch_seal_matt", (0.58, 0.59, 0.62), metallic=0.75, rough=0.42)
+    M["kapton"] = g.make_mat("kapton_tape", (0.78, 0.40, 0.05), rough=0.22, transmission=0.35, ior=1.7)
     return M
 
 
@@ -355,13 +377,25 @@ def poly_prism(bm, pts, z0, z1, bevel=0.0, seg=2):
 
 
 # ------------------------------------------------------------------ shell (skin side)
+SKIN_NAME = dict(radius=8.2, centre_deg=90.0, size=1.2, inward=False)     # CASEBACK on an arc above the windows, concentric with the rim, like the name on a dial
+SKIN_MARK = dict(size=4.0, cx=0.0, cy=-6.5)                                # the mark below the windows, about as far under them as the name is above (the windows are 0.6 mm above the centre)
+
+
+def skin_engraving():
+    """Name and mark on the skin face, cut 0.05 to 0.07 mm deep. Both read correctly looking at the face (from -Z)."""
+    cut = [arc_text_cutter("CASEBACK", z=0.0, mirror=True, **SKIN_NAME)]
+    cut += logo_cutters(SKIN_MARK["size"], SKIN_MARK["cx"], SKIN_MARK["cy"], GROOVE_EPS, mirror=True, stroke=0.08)
+    return cut
+
+
 def build_shell(M):
     r0 = B.R_CAV
-    prof = [(0.0, 0.0), (R - 0.5, 0.0)] + g.arc(R - 0.5, 0.5, 0.5, -90, 0, 8)[1:] + \
+    inner = [(r0, B.FLOOR + EDGE_IN)] + g.arc(r0 - EDGE_IN, B.FLOOR + EDGE_IN, EDGE_IN, 0, -90, 6)[1:] if EDGE_IN > 0 else [(r0, B.FLOOR)]
+    prof = [(0.0, 0.0), (R - EDGE_SKIN, 0.0)] + g.arc(R - EDGE_SKIN, EDGE_SKIN, EDGE_SKIN, -90, 0, max(8, round(16 * EDGE_SKIN / 1.2)))[1:] + \
            [(R, WALL_TOP - 0.08), (R - 0.08, WALL_TOP),                  # outer edge of the seam
             (r0 + 0.10, WALL_TOP), (r0, WALL_TOP - 0.10),                # lead-in at the inside of the rim
-            (r0, GROOVE_Z[3]), (r0 + BEAD, GROOVE_Z[2]), (r0 + BEAD, GROOVE_Z[1]), (r0, GROOVE_Z[0]),     # the groove for the bead of the lid
-            (r0, B.FLOOR), (0.0, B.FLOOR)]
+            (r0, GROOVE_Z[3]), (r0 + BEAD, GROOVE_Z[2]), (r0 + BEAD, GROOVE_Z[1]), (r0, GROOVE_Z[0])] + inner + \
+           [(0.0, B.FLOOR)]                                              # the inside corner is rounded too, so the big outer radius leaves 0.4 mm of material
     ob = g.obj_from_bm("Shell", g.revolve(prof, 200), M["peek"])
     sfh = next(p for p in B.ALL_PARTS if p.ref == "U2")
     cut = []
@@ -369,8 +403,9 @@ def build_shell(M):
         cut.append(box_cut((aw, ah, B.FLOOR + 0.4), (sfh.x + ax, sfh.y + ay, B.FLOOR / 2)))
     for x, y in B.CONTACTS:                                       # holes for the two charge slugs
         cut.append(cyl_cut(B.CONTACT_SLUG_D / 2 + 0.05, -0.1, B.FLOOR + 0.1, x, y, 40))
-    cut.append(box_cut((B.NOTCH_W, NOTCH_DEPTH + 0.3, NOTCH_H + 0.2),    # key notch in the outer wall, at -Y, for the puck's key
-                       (0.0, -(R - NOTCH_DEPTH + (NOTCH_DEPTH + 0.3) / 2), (NOTCH_H - 0.2) / 2)))
+    cut += pocket_cuts()                                          # two pockets in the rim for the hook and the latch of the charger
+    if ENGRAVE:                                                   # generate_mock.py turns it off: 0.07 mm lines cannot be printed with a 0.4 mm nozzle
+        cut += skin_engraving()
     bool_diff(ob, cut, "EXACT")
 
     b = g.new_bm()                                                # ribs that carry the board edge
@@ -409,21 +444,31 @@ def build_window_and_skin(M):
 # ------------------------------------------------------------------ board and cell
 def build_cell(M):
     """Custom LiPo pouch cell in the cap of the disc: 1.5 mm thick, its protection board along the flat side that faces the
-    board, two nickel tabs to the pads BT1 and BT2."""
+    board, two nickel tabs to the pads BT1 and BT2. Drawn the way a small pouch cell is made: a laminate pouch with flat
+    faces and soft edges, its side seals folded up against it, a flat seal along the side the tabs come out of, the
+    protection board wrapped in amber polyimide tape, the print on the face towards the board and a foam pad in the
+    middle of the face towards the lid. Everything stays inside CELL_POLY and the heights of the stack."""
     T, z0 = B.CELL_T, B.CELL_Z0
     poly = list(B.CELL_POLY)
     y_flat = min(y for _, y in poly)
     pcm_l = 2.0
-    body = clip_poly_y(inset_poly(poly, 0.9), y_flat + pcm_l + 0.1)      # the filled part of the pouch
+    y_seal = y_flat + pcm_l + 0.1                                 # the pouch starts here; the flat seal runs from the board to it
+    body = clip_poly_y(inset_poly(poly, 0.9), y_seal)
     bag = BP.Bag()
-    poly_prism(bag["pouch"], body, z0, z0 + T, 0.25, 3)
-    poly_prism(bag["pouch_seal"], poly, z0 + T / 2 - 0.15, z0 + T / 2 + 0.15, 0.05, 2)      # the seals, folded flat: thin foil
+    poly_prism(bag["pouch"], body, z0, z0 + T, 0.45, 5)            # the filled pouch
+    fold = clip_poly_y(inset_poly(poly, 0.72), y_seal + 0.05)      # side seals folded up against it: a band round its lower part
+    poly_prism(bag["pouch_seal"], fold, z0 + 0.12, z0 + T - 0.32, 0.06, 2)
+    xs = [x for x, y in body if abs(y - y_seal) < 1e-6]
+    BP.rbox(bag["pouch_seal"], (max(xs) - min(xs) - 0.2, 0.7, 0.16), (0.0, y_seal - 0.2, z0 + T / 2), 0.05, 2)   # the flat seal
     pcm = g.new_bm()
     pcm_x = 8.9
-    g.add_box(pcm, (2 * pcm_x, pcm_l - 0.2, 0.30), (0.0, y_flat + pcm_l / 2, z0 + T - 0.45))
+    pcm_z = z0 + T - 0.45                                          # middle of the protection board
+    g.add_box(pcm, (2 * pcm_x, pcm_l - 0.2, 0.30), (0.0, y_flat + pcm_l / 2, pcm_z))
     g.obj_from_bm("Cell_PCM", pcm, M["pcb"], smooth=False)
     for k, (dx, sz) in enumerate(((-5.6, (1.2, 0.7, 0.28)), (-1.4, (0.9, 0.5, 0.25)), (3.0, (1.0, 0.6, 0.26)), (6.2, (0.8, 0.5, 0.24)))):   # parts on it
-        BP.rbox(bag["mold"], sz, (dx, y_flat + pcm_l / 2 - 0.1, z0 + T - 0.45 + 0.15 + sz[2] / 2), 0.04, 1)
+        BP.rbox(bag["mold"], sz, (dx, y_flat + pcm_l / 2 - 0.1, pcm_z + 0.15 + sz[2] / 2), 0.04, 1)
+    tape0, tape1 = pcm_z - 0.18, z0 + T + 0.01                     # the tape wraps the board and the parts on it
+    BP.rbox(bag["kapton"], (2 * pcm_x + 0.16, pcm_l - 0.1, tape1 - tape0), (0.0, y_flat + pcm_l / 2, (tape0 + tape1) / 2), 0.07, 2)
     pads = [pd for pd in B.PADS if pd[0] in ("BT1", "BT2")]
     for ref, _side, _shape, px, py, _w, _h, _fn in pads:          # nickel tabs, bent up to the pads on the watch side of the board
         ya = y_flat + 0.4
@@ -432,18 +477,31 @@ def build_cell(M):
         BP.sweep(bag["nickel"], [(0.0, z0 + T - 0.35), (0.5, z0 + T - 0.35), (0.9, zt), (D + 0.4, zt)], 1.0, 0.10, px, ya, -90)
         BP.blob(bag["tin"], (px, py, B.PCB_Z1 + 0.07), (0.75, 0.55, 0.05), 12, 6)
     for key, bm in bag.bms.items():
-        mat = {"pouch": "pouch", "pouch_seal": "pouch_seal", "mold": "mold", "nickel": "nickel", "tin": "tin"}[key]
-        g.obj_from_bm("Cell_" + key, bm, M[mat], smooth=key != "nickel")
-    lab = g.new_bm()                                              # printed label on the watch side of the pouch
-    poly_prism(lab, inset_poly(body, 0.8), z0 + T, z0 + T + 0.02)
-    g.obj_from_bm("Cell_label", lab, g.make_mat("cell_label_white", (0.85, 0.85, 0.82), rough=0.5), smooth=False)
-    ymid = sum(y for _, y in body) / len(body)
-    txt = bpy.data.objects.new("Cell_label_text", BP.text_mesh(f"LiPo 3.7 V  {B.cell_mah():.0f} mAh", 0.9, 0.0, ymid, z0 + T + 0.032, rot=0.0, extrude=0.008))
-    txt.data.materials.append(g.make_mat("label_ink", (0.02, 0.02, 0.02), rough=0.5))
+        mat = {"pouch": "pouch", "pouch_seal": "pouch_seal", "mold": "mold", "nickel": "nickel", "tin": "tin", "kapton": "kapton"}[key]
+        g.obj_from_bm("Cell_" + key, bm, M[mat], smooth=key not in ("nickel", "kapton"))
+    ymid = sum(y for _, y in body) / len(body)                     # the print, on the face towards the board, read from there
+    txt = bpy.data.objects.new("Cell_print", BP.text_mesh(f"LiPo 3.7 V  {B.cell_mah():.0f} mAh", 0.8, 0.0, ymid, z0 - 0.006,
+                                                             rot=0.0, extrude=0.004, mirror=True))
+    txt.data.materials.append(g.make_mat("label_ink", (0.03, 0.03, 0.035), rough=0.5))
     g.collection(COLL_ASM).objects.link(txt)
     f = g.new_bm()
-    poly_prism(f, inset_poly(body, 0.4), z0 + T + 0.03, z0 + T + 0.03 + B.FOAM_T, 0.06, 2)
+    poly_prism(f, inset_poly(body, 1.1), z0 + T + 0.03, z0 + T + 0.03 + B.FOAM_T, 0.06, 2)
     g.obj_from_bm("Foam_cell", f, M["foam"])
+
+
+def weighted_normals(ob):
+    """Large flat faces keep their own normal next to small fillets and grooves, so the floor of the shell and the faces of
+    the lid do not streak from the windows and the engraving to the rim. Stored in the mesh, like a boolean."""
+    m = ob.modifiers.new("weighted", "WEIGHTED_NORMAL")
+    m.mode, m.weight, m.keep_sharp = "FACE_AREA", 50, True
+    bpy.context.view_layer.update()
+    new = bpy.data.meshes.new_from_object(ob.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+    old = ob.data
+    name = old.name
+    ob.modifiers.clear()
+    ob.data = new
+    bpy.data.meshes.remove(old)
+    new.name = name
 
 
 # ------------------------------------------------------------------ lid (watch side)
@@ -451,14 +509,10 @@ def build_lid(M):
     prof = [(0.0, LID_IN), (SK_IN, LID_IN), (SK_IN, SK_Z0), (SK_OUT - 0.10, SK_Z0), (SK_OUT, SK_Z0 + 0.08),      # underside, inside of the skirt, its tip
             (SK_OUT, BEAD_Z[0]), (SK_OUT + BEAD, BEAD_Z[1]), (SK_OUT + BEAD, BEAD_Z[2]), (SK_OUT, BEAD_Z[3]),    # the bead: 45 degrees to go in, 60 from the axis to come out
             (SK_OUT, LID_IN), (LIP_R, LID_IN), (LIP_R, WALL_TOP), (R - 0.08, WALL_TOP), (R, WALL_TOP + 0.08),   # outside of the skirt, the lip that lands on the wall
-            (R, H - 0.3)] + g.arc(R - 0.3, H - 0.3, 0.3, 0, 90, 8)[1:] + [(R_RECESS, H), (R_RECESS, H - PAD_T), (0.0, H - PAD_T)]
+            (R, H - EDGE_LID)] + g.arc(R - EDGE_LID, H - EDGE_LID, EDGE_LID, 0, 90, 10)[1:] + [(R_RECESS, H), (R_RECESS, H - PAD_T), (0.0, H - PAD_T)]
     if FLAT_FACE:
-        prof = prof[:prof.index((R, H - 0.3))] + [(R, H), (0.0, H)]
+        prof = prof[:prof.index((R, H - EDGE_LID))] + [(R, H), (0.0, H)]
     lid = g.obj_from_bm("Lid", g.revolve(prof, 200), M["peek_lid"])
-    if ENGRAVE:                                                    # generate_mock.py turns it off: 0.07 mm lines cannot be printed with a 0.4 mm nozzle
-        cut = [arc_text_cutter("CASEBACK", 10.35, 90.0, 1.2, H)]
-        cut += logo_cutters(3.2, 10.35 * cos(radians(-90.0)), 10.35 * sin(radians(-90.0)), H - GROOVE_EPS, mirror=False, stroke=0.07)
-        bool_diff(lid, cut, "EXACT")
     b = g.new_bm()                                                 # a small foot over each rib: the board cannot lift off its ribs
     for a0, a1 in LEDGE_ANGLES:
         sec = g.sector(FOOT_R[0], FOOT_R[1], a0, a1, B.PCB_Z1 + 0.03, LID_IN + 0.05)
@@ -489,6 +543,8 @@ def build_all():
     build_lid(M)
     for ob in g.collection(COLL_ASM).objects:
         g.autosmooth(ob, 12.0 if ob.name in ("Shell", "Lid") else 30.0)       # a low angle keeps the flat faces flat around the grooves
+        if ob.name in ("Shell", "Lid"):
+            weighted_normals(ob)
     return M
 
 
@@ -539,6 +595,10 @@ def build_puck(M):
             box_cut((12.0, 2.0, 4.6), (0.0, USB_FLAT_Y + 1.0, USB_Z))]      # a flat on the rim: the cylinder meets y = 15.9 at x = +-6
     for x, y in B.CONTACTS:
         cut.append(cyl_cut(0.62, 1.4, P_FLOOR + 0.1, x, y, 24))
+    L = LATCH                                                      # the slot the latch slides in, from the dish wall out through the rim at -Y
+    cut.append(box_cut((L["w"] + 0.3, P_R - R + 2.0, P_H - (P_FLOOR - 1.6) + 0.5), (0.0, -(R + P_R) / 2 - 0.5, (P_FLOOR - 1.6 + P_H + 0.5) / 2)))
+    zs = P_FLOOR - 2.0                                             # a channel under the slot for the spring
+    cut.append(box_cut((L["spring_d"] + 0.4, 4.6, L["spring_d"] + 0.4), (0.0, -14.4, zs)))       # from y = -12.1 to -16.7, closed at the rim
     bool_diff(body, cut, "EXACT")
 
     base = g.new_bm()
@@ -549,9 +609,11 @@ def build_puck(M):
     foot = g.revolve([(PLATE_R + 0.6, -0.5), (P_R - 0.8, -0.5), (P_R - 0.8, 0.0), (PLATE_R + 0.6, 0.0)], 200)
     g.obj_from_bm("Puck_foot", foot, M["foot"], coll)
 
-    key = g.new_bm()                                               # key tab: enters the notch in the outer wall of the disc
-    g.add_box(key, (2.6, 0.7, 1.1), (0.0, -(R - NOTCH_DEPTH + 0.15 + 0.35), P_FLOOR + 0.55))
-    g.obj_from_bm("Puck_key", key, M["puck"], coll, smooth=False)
+    hook = g.new_bm()                                              # fixed hook at +Y: a tooth out of the dish wall into the narrow pocket
+    r_in = R - HOOK["reach"]
+    g.add_box(hook, (HOOK["w"], DISH_R + 0.3 - r_in, HOOK["z1"] - HOOK["z0"]), (0.0, (DISH_R + 0.3 + r_in) / 2, P_FLOOR + (HOOK["z0"] + HOOK["z1"]) / 2))
+    g.obj_from_bm("Puck_hook", hook, M["puck"], coll, smooth=False)
+    build_latch(M, coll, closed=True)
     pc = g.new_bm()                                                # puck board: round, with a tab for the USB-C socket
     g.add_cyl(pc, PUCK_BOARD_R, 0.6, 1.4, 0, 0, 96)
     pcb = g.obj_from_bm("Puck_pcb", pc, M["pcb"], coll)
@@ -584,6 +646,29 @@ def build_puck(M):
     pogo_pins(M, coll, P_FLOOR + POGO_FREE)
     for ob in coll.objects:
         g.autosmooth(ob)
+
+
+def build_latch(M, coll, closed=True):
+    """The latch: a slider in a slot of the body at -Y, its tooth in the wide pocket of the disc, a spring behind it and a button that
+    stands out of the rim; pressing the button pulls the tooth out of the pocket. closed=False draws it pressed."""
+    L = LATCH
+    dy = 0.0 if closed else L["travel"]
+    r_tip = R - B.POCKET_DEPTH + 0.07                              # the tip of the tooth in the pocket
+    z0, z1 = P_FLOOR + HOOK["z0"], P_FLOOR + HOOK["z1"]
+    bm = g.new_bm()
+    g.add_box(bm, (L["w"], R + 0.4 - r_tip, z1 - z0), (0.0, -(r_tip + R + 0.4) / 2 - dy, (z0 + z1) / 2))            # the tooth
+    y_back = P_R + L["button_out"]
+    g.add_box(bm, (L["w"], y_back - (R + 0.3), z1 - (P_FLOOR - 1.4)), (0.0, -(R + 0.3 + y_back) / 2 - dy, (z1 + P_FLOOR - 1.4) / 2))   # the slider and its button
+    zc = P_FLOOR - 2.0
+    g.add_box(bm, (1.2, 0.6, (P_FLOOR - 1.4) - (zc - 0.6)), (0.0, -13.3 - dy, ((P_FLOOR - 1.4) + (zc - 0.6)) / 2))   # a tab down into the spring channel
+    ob = g.obj_from_bm("Puck_latch", bm, M["puck"], coll, smooth=False)
+    sp = g.new_bm()                                                # a coil spring in the channel, between the tab and the outer end: it pushes the tooth in
+    y0, y1 = -13.6 - dy, -16.6
+    turns, n = 6, 6 * 16
+    pts = [(0.5 * L["spring_d"] * cos(2 * pi * turns * i / n), y0 + (y1 - y0) * i / n, zc + 0.5 * L["spring_d"] * sin(2 * pi * turns * i / n)) for i in range(n + 1)]
+    BP.tube(sp, pts, 0.08, 6)
+    g.obj_from_bm("Puck_latch_spring", sp, M["pogo_spring"], coll)
+    return ob
 
 
 DOCK_CUT_X = B.CONTACTS[1][0] + 0.011                                # the section through the right charge contact, 0.011 mm off its axis: on the axis the boolean drops the barrel and the plunger
@@ -645,7 +730,7 @@ def build_variants(M):
     for ob in g.collection(COLL_PUCK).objects:
         if not ob.name.startswith("Puck_pogo_pins"):
             dock.objects.link(ob.copy())
-    pogo_pins(M, dock, P_FLOOR, "Puck_pogo_pins_pressed")           # pressed flush by the weight of the watch
+    pogo_pins(M, dock, P_FLOOR, "Puck_pogo_pins_pressed")           # pressed flush: the hook and the latch hold the disc down
     copy_collection(g.collection(COLL_DOCK), g.collection(COLL_DSEC))
     cut_half(g.collection(COLL_DSEC), DOCK_CUT_X)
 
@@ -667,12 +752,12 @@ def write_stl(ob, path: str) -> int:
 
 
 def build_dummy(M):
-    """Solid disc of the same outline, with the pad recess and the key notch, for the microsuction tests.
+    """Solid disc of the same outline, with the pad recess and the two pockets of the rim, for the microsuction tests.
     No cavity: it is a weight on the pad. Print it in PETG at full infill and add a washer to reach the weight to test."""
-    prof = [(0.0, 0.0), (R - 0.5, 0.0)] + g.arc(R - 0.5, 0.5, 0.5, -90, 0, 8)[1:] + [(R, H - 0.3)] + \
-           g.arc(R - 0.3, H - 0.3, 0.3, 0, 90, 8)[1:] + [(R_RECESS, H), (R_RECESS, H - PAD_T), (0.0, H - PAD_T)]
+    prof = [(0.0, 0.0), (R - EDGE_SKIN, 0.0)] + g.arc(R - EDGE_SKIN, EDGE_SKIN, EDGE_SKIN, -90, 0, 16)[1:] + [(R, H - EDGE_LID)] + \
+           g.arc(R - EDGE_LID, H - EDGE_LID, EDGE_LID, 0, 90, 10)[1:] + [(R_RECESS, H), (R_RECESS, H - PAD_T), (0.0, H - PAD_T)]
     ob = g.obj_from_bm("Fit_dummy", g.revolve(prof, 200), M["peek"], g.collection("Dummy"))
-    cut = [box_cut((B.NOTCH_W, NOTCH_DEPTH + 0.3, NOTCH_H + 0.2), (0.0, -(R - NOTCH_DEPTH + (NOTCH_DEPTH + 0.3) / 2), (NOTCH_H - 0.2) / 2))]
+    cut = pocket_cuts()
     bool_diff(ob, cut, "EXACT")
     bm = bmesh.new()
     bm.from_mesh(ob.data)
@@ -683,7 +768,7 @@ def build_dummy(M):
 
 
 STL_PARTS = {"disc_shell": "Shell", "disc_lid": "Lid", "puck_body": "Puck_body", "puck_base_plate": "Puck_base_plate",
-             "puck_key": "Puck_key"}
+             "puck_hook": "Puck_hook", "puck_latch": "Puck_latch"}
 
 
 def export_stl(out, M):
@@ -705,6 +790,7 @@ def setup_render(w=1800, h=1350, samples=96):
     sc.render.engine = "CYCLES"
     sc.render.image_settings.file_format = "JPEG"          # PNG of a denoised render is 3 MB; JPEG at 92 is a fifth of it
     sc.render.image_settings.quality = 92
+    sc.render.use_stamp_filename = sc.render.use_stamp_hostname = False   # no path of the blend or name of the machine in the images
     sc.cycles.samples = samples
     sc.cycles.use_denoising = True
     sc.cycles.device = "CPU"
@@ -783,10 +869,11 @@ SHOTS = {
     "disc_edge": ([COLL_ASM], (0, -12.5, 1.5), 40, 12, 14, (1800, 1000)),
     "disc_exploded": ([COLL_EXP], (0, 0, 7.5), 105, 0, 30, (1800, 1350)),
     "disc_section": ([COLL_SEC], (0.0, 0, 1.3), 70, 90, 17, (1800, 900)),
-    "disc_puck": ([COLL_PUCK], (0, 2, 3.0), 108, 200, 34, (1800, 1350)),
+    "disc_edge_section": ([COLL_SEC], (3.2, -10.6, 1.5), 26, 90, 6, (1800, 1000)),
+    "disc_puck": ([COLL_PUCK], (0, -2, 3.0), 108, 160, 34, (1800, 1350)),
     "disc_puck_usb": ([COLL_PUCK], (0, 16.0, USB_Z), 40, 180, 9, (1800, 1200)),
     "disc_puck_section": ([COLL_PSEC], (0.0, 0.0, 3.4), 100, 90, 12, (1800, 1000)),
-    "disc_docked": ([COLL_DOCK], (0, 0, 4.5), 85, 22, 30, (1800, 1350)),
+    "disc_docked": ([COLL_DOCK], (0, 0, 4.5), 85, 160, 30, (1800, 1350)),
     "disc_docked_section": ([COLL_DSEC], (DOCK_CUT_X, -1.0, 4.5), 62, 90, 12, (1800, 900)),
     "disc_contact_section": ([COLL_DSEC], (DOCK_CUT_X, -1.0, 4.6), 34, 90, 5, (1800, 1000)),
     "disc_skin_contacts": ([COLL_ASM], (0, -1.0, 0.2), 52, 180, -50, (1800, 1100)),

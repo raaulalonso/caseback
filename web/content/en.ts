@@ -32,12 +32,12 @@ export const en = {
     },
     status: "Prototype phase",
     drawing:
-      "Drawing of a watch seen from the wrist side. On its caseback sits a round disc made of seven coloured shapes. Lines lead from parts of the disc to the sections of this site.",
+      "Drawing of a watch that turns over and becomes the disc, shown in 3D: its parts come down into the shell one by one and the closed disc turns to its skin face. Lines lead from parts of the disc to the sections of this site.",
     callouts: {
       wear: { label: "How it's worn", part: "Microsuction pad" },
       measure: { label: "What it measures", part: "Sensor window" },
       app: { label: "The app", part: "Bluetooth antenna" },
-      open: { label: "Code and licences", part: "Caseback screw" },
+      open: { label: "Code and licences", part: "Seam between shell and lid" },
     },
   },
   wear: {

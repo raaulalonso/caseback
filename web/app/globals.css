@@ -83,12 +83,20 @@ button { background: none; border: 0; cursor: pointer; }
   transform: translate(-50%, -50%);
   transition: transform 0.48s var(--ease-draw), opacity 0.3s linear 0.1s;
 }
-/* The watch turns over on a real perspective. Each face takes its own half of one cubic in-out: the dial turns away
-   to edge-on with the ease-in half, the caseback comes round from edge-on with the ease-out half. */
-.card { position: absolute; inset: 0; perspective: calc(2600 * var(--u)); }
+/* The watch turns over on a real perspective: the dial turns away to edge-on with the ease-in half of a cubic in-out,
+   and the 3D disc (components/home/disc3d.ts) comes round from edge-on with the ease-out half. Its canvas is half as big
+   again as the drawing box on every side, so the parts that stand above the shell are not cut off. */
+/* The perspective is the 3D camera's distance (600 / tan 10 degrees, in drawing units), so both halves of the turn match. */
+.card { position: absolute; inset: 0; perspective: calc(3403 * var(--u)); }
 .face, .over { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.face-front { transform: rotateY(90deg); visibility: hidden; }
+.disc3d { position: absolute; left: -25%; top: -25%; width: 150%; height: 150%; opacity: 0; pointer-events: none; }
+.face-front { transition: opacity 0.35s var(--ease); }
+.home[data-run="done"]:not([data-fallback]) .face-front { opacity: 0; visibility: hidden; transition: opacity 0.35s var(--ease), visibility 0s 0.35s; }
 .home[data-run="pending"] :is(.seal, .side) { visibility: hidden; }
+/* the parts on the second clock wait for the watch to turn; at rest the lines wait for the disc they point at */
+.home:is([data-run="pending"], [data-run="intro"]) .late { visibility: hidden; }
+.leaders { transition: opacity 0.3s linear; }
+.home[data-run="done"]:not([data-ready], [data-fallback]) .leaders { opacity: 0; }
 
 /* ---------------------------------------------------------------- home: drawing */
 :root { --ease-draw: cubic-bezier(0.65, 0, 0.35, 1); }
@@ -102,38 +110,14 @@ button { background: none; border: 0; cursor: pointer; }
 .fill-ground { fill: var(--ground); }
 .hand { transform: rotate(var(--to)); transform-box: view-box; transform-origin: 0 0; }
 .wick { fill: var(--lume); opacity: 0; transform-box: view-box; transform-origin: 0 0; }
-.slot { transform: rotate(var(--s)); transform-box: fill-box; transform-origin: center; transition: transform 0.5s var(--ease-draw); }
 
-.mark { fill: none; stroke: var(--ink-3); stroke-width: calc(1px * var(--px, 1)); stroke-dasharray: 6 8; }
-.disc { transform-box: view-box; transform-origin: 0 0; }
-.disc-body { fill: var(--raised); }
-.etch { fill: none; stroke: #000; stroke-width: calc(2px * var(--px, 1)); stroke-linecap: round; stroke-linejoin: round; }
-.etch.pad { stroke-width: calc(1.5px * var(--px, 1)); }
-.led, .pd { fill: #000; transition: fill 0.24s var(--ease); }
-.second { opacity: 1; transition: opacity 0.6s linear; }
-.second .ln { stroke: var(--lume); }
-.home:not([data-run="done"]) .second { opacity: 0; }
-
-/* leaders: drawn from the part outward; hover fills the line in lume */
+/* leaders: drawn from the part outward; hover fills the line in lume, and the 3D disc answers with that part */
 .leader-line, .leader-hot { fill: none; stroke-width: calc(1px * var(--px, 1)); }
 .leader-line { stroke: var(--ink-3); }
 .leader-hot { stroke: var(--lume); stroke-width: calc(1.5px * var(--px, 1)); stroke-dasharray: 1 1; stroke-dashoffset: 1; transition: stroke-dashoffset 0.5s var(--ease-draw); }
 .leader.on .leader-hot { stroke-dashoffset: 0; }
 .node { fill: var(--ink-1); stroke: #000; stroke-width: calc(2px * var(--px, 1)); transform-box: fill-box; transform-origin: center; transition: fill 0.24s var(--ease), transform 0.3s var(--ease-draw); }
 .leader.on .node { fill: var(--lume); transform: scale(1.5); }
-
-/* the antenna stays faint until the line of the app is hovered, so it does not clutter the disc */
-.antenna { opacity: 0.16; transition: opacity 0.3s var(--ease); }
-.home[data-hover="app"] .antenna { opacity: 1; stroke-dasharray: 0.05 0.035; animation: march-n 0.6s linear infinite; }
-
-/* hover: each line wakes the part it comes from */
-.home[data-hover="measure"] .led-green { fill: var(--m-steps); }
-.home[data-hover="measure"] .led-red { fill: var(--alert); }
-.home[data-hover="measure"] .led-ir { fill: #7a1d2a; }
-.home[data-hover="wear"] .pad { animation: march 0.9s linear infinite; }
-.home[data-hover="open"] .screw-4 .slot { transform: rotate(calc(var(--s) - 90deg)); }
-@keyframes march { to { stroke-dashoffset: -28; } }
-@keyframes march-n { to { stroke-dashoffset: -0.17; } }
 
 /* labels at the end of each shoulder */
 .callouts { position: absolute; left: 50%; top: calc(50% + 58px); width: 0; height: 0; transition: opacity 0.3s linear; }
@@ -170,25 +154,27 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .skip:hover { color: var(--ink-1); }
 
-/* leaving for a section: the drawing moves toward the part */
-.home { transition: opacity 0.22s linear; }
+/* leaving for a section: the camera closes in on the part (disc3d.ts, goTo) while the page fades, a beat behind it */
+.home { transition: opacity 0.36s var(--ease-draw) 0.1s; }
 .home[data-leaving] { opacity: 0; pointer-events: none; }
-.section { animation: page-in 0.3s linear both; }
+.section { animation: page-in 0.45s var(--ease) both; }
 @keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
 
-/* ---------------------------------------------------------------- home: the intro, all on one clock (timeline.ts) */
+/* ---------------------------------------------------------------- home: the intro on two clocks (timeline.ts) */
+/* The watch draws under "intro". Under "build", from the moment it turns, the dial turns away and the parts marked .late
+   (leaders, labels, the end of the side view) come in; the watch's own animations are over by then and drop off. */
 .home[data-run="intro"] {
   & .a-draw { stroke-dasharray: 1 1; animation: draw var(--dur) var(--ease-draw) var(--d) both; }
   & .a-wick { animation: wick var(--dur) var(--ease-draw) var(--d) both; }
   & .a-fade { animation: fade var(--dur) linear var(--d) both; }
   & .a-hand { animation: hand var(--dur) var(--ease-draw) var(--d) both; }
-  & .a-flip { animation: settle var(--dur) var(--ease-draw) var(--d) both; }
+}
+.home[data-run="build"] {
   & .a-flip .face-front { animation: turn-away calc(var(--dur) / 2) cubic-bezier(0.32, 0, 0.67, 0) var(--d) both; }
-  & .a-flip .face-back { animation: turn-in calc(var(--dur) / 2) cubic-bezier(0.33, 1, 0.68, 1) calc(var(--d) + var(--dur) / 2) both; }
-  & .a-slot { animation: slot var(--dur) var(--ease-draw) var(--d) both; }
-  & .a-pop { animation: pop var(--dur) var(--ease-draw) var(--d) both; }
-  & .a-land { animation: land var(--dur) var(--ease-draw) var(--d) both; }
-  & .a-rise { animation: rise var(--dur) var(--ease-draw) var(--d) both; }
+  & .late .a-draw { stroke-dasharray: 1 1; animation: draw var(--dur) var(--ease-draw) var(--d) both; }
+  & .late .a-fade { animation: fade var(--dur) linear var(--d) both; }
+  & .late .a-pop { animation: pop var(--dur) var(--ease-draw) var(--d) both; }
+  & .late .a-rise { animation: rise var(--dur) var(--ease-draw) var(--d) both; }
   & .callout a { animation: fade 0.3s linear var(--d) both; }
   & .callout .label { animation: charge-text var(--dur) linear var(--d) both; }
 }
@@ -196,19 +182,15 @@ button { background: none; border: 0; cursor: pointer; }
 @keyframes wick { 0% { opacity: 0; transform: rotate(0deg); } 4%, 88% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)); } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes hand { from { transform: rotate(0deg); } to { transform: rotate(var(--to)); } }
-@keyframes settle { from { transform: scale(1.06); } to { transform: scale(1); } }
-@keyframes turn-away { from { transform: rotateY(0deg); visibility: visible; } to { transform: rotateY(90deg); visibility: visible; } }
-@keyframes turn-in { from { transform: rotateY(-90deg); } to { transform: rotateY(0deg); } }
-@keyframes slot { from { transform: rotate(calc(var(--s) - 90deg)); } to { transform: rotate(var(--s)); } }
+@keyframes turn-away { from { transform: rotateY(0deg); } to { transform: rotateY(90deg); visibility: hidden; } }
 /* lume charges and cools to the colour of the line */
 @keyframes charge { 0% { opacity: 0; fill: var(--lume); } 6% { opacity: 1; fill: var(--lume); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); } 100% { fill: var(--ink-3); } }
 @keyframes charge-text { 0% { opacity: 0; color: var(--lume); } 6% { opacity: 1; color: var(--lume); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); } 100% { color: var(--ink-1); } }
 @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
-@keyframes land { from { transform: scale(1.14); } to { transform: scale(1); } }
 @keyframes rise { from { transform: translateY(26px); } to { transform: translateY(0); } }
 
 /* ---------------------------------------------------------------- home: the text arrives when the drawing is done */
-.headline, .sub, .top, .foot { transition: opacity 0.7s linear; }
+.headline, .sub, .top, .foot { transition: opacity 0.8s var(--ease); }
 .stage:has(.home:not([data-run="done"])) :is(.headline, .sub, .top, .foot) { opacity: 0; pointer-events: none; }
 
 /* ---------------------------------------------------------------- home: phones, tablets and any portrait screen */
@@ -235,19 +217,21 @@ button { background: none; border: 0; cursor: pointer; }
     margin: calc(-60 * var(--u) + max(0px, (100svh - 300px - 680 * var(--u)) / 2)) 0;
   }
   .leader-line, .leader-hot, .node { display: none; }
-  .antenna { display: none; }
   /* Only the central drawing animates. The side view and the buttons come in whole, with the text. */
   .side, .callouts { transition: opacity 0.7s linear; }
   .stage:has(.home:not([data-run="done"])) :is(.side, .callouts) { opacity: 0; pointer-events: none; }
-  .home[data-run="intro"] :is(.side, .callouts) * { animation: none !important; }
+  .home:is([data-run="intro"], [data-run="build"]) :is(.side, .callouts) * { animation: none !important; }
   .callouts { grid-column: 1 / -1; grid-row: 4; position: static; width: 100%; height: auto; margin-top: 8px; }
+  /* On the desktop the labels go top to bottom down the drawing; listed here, "Code and licences" goes last. */
+  .callouts ol { display: flex; flex-direction: column; }
   .callout { position: static; }
+  .callout-key-open { order: 1; }
   .callout a, .callout-l a, .callout-r a {
     position: static; transform: none; text-align: left;
     display: flex; justify-content: space-between; align-items: center;
     padding: 18px 0; border-top: 1px solid var(--hair);
   }
-  .callout:last-child a { border-bottom: 1px solid var(--hair); }
+  .callout-key-open a { border-bottom: 1px solid var(--hair); }
   .callout .label { font-size: 17px; }
   .callout a::after { content: "\2192"; font-size: 15px; color: var(--ink-3); transition: color 0.24s var(--ease), transform 0.24s var(--ease); }
   .callout a:active .label, .callout a:active::after { color: var(--lume); }

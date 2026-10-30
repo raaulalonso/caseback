@@ -1,5 +1,7 @@
-// The intro on one clock. Every timed part of the home reads its start and length from here: CSS animations get them
-// as `--d` and `--dur` (all started in the same frame by data-run="intro"), and the blobs read the same numbers in JS.
+// The intro on two clocks. `T` times the watch, from the moment the page starts it; `B` times what comes after, from the
+// moment the watch begins to turn over. The turn waits for the disc model if it has not loaded by `T.flip`, so the second
+// clock starts at `T.flip` or later. CSS animations get their start and length as `--d` and `--dur`: the watch's under
+// data-run="intro", the rest under data-run="build", each set started in the same frame. The 3D disc reads `B` in JS.
 import type { CSSProperties } from "react";
 
 export const T = {
@@ -7,26 +9,35 @@ export const T = {
   ticks: 0.55,
   indices: 0.5, // pairs from 12 outward, 70 ms apart
   hands: 0.7, // the hands find the visitor's time
-  flip: 1.85, // the watch turns over
-  flipDur: 0.95,
-  rings: 2.6, // caseback rings, knurl, screws
-  knurl: 2.7,
-  screws: 2.85,
-  mark: 3.3, // where the disc will go
-  disc: 3.45, // the disc forms, held above the caseback
-  land: 4.2, // it comes down onto the caseback
-  landDur: 0.8,
-  etch: 4.95,
-  wrist: 5.0, // side view: the wrist comes up to the disc
-  callouts: 5.15,
-  done: 6.4,
-  doneCompact: 5.7, // on a phone only the central drawing moves; the rest arrives once it is finished
+  flip: 1.8, // the watch turns over, as soon as the disc model is there
 } as const;
 
-/** Cubic in-out, the one ease for drawing. */
-export const easeInOut = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+export const B = {
+  turn: 0, // one cubic in-out: the dial turns away to edge-on in the first half, the disc comes round in the second
+  turnDur: 0.9,
+  open: 0.78, // the disc opens along its axis while the camera drops to the exploded view
+  openDur: 1.05,
+  close: 2.3, // the parts close up in the order they go in, 160 ms apart, while the camera rises to rest
+  step: 0.16,
+  drop: 0.62,
+  rest: 3.95, // the camera is at rest
+  pulse: 3.62, // the LEDs light once as the last part closes
+  pulseDur: 0.7,
+  callouts: 3.8,
+  done: 4.75,
+  doneCompact: 4.0, // on a phone only the central drawing moves; the rest arrives once it is finished
+  // side view: the disc goes up onto the caseback as it closes, then the wrist comes up to meet it
+  side: 3.2,
+  sideDur: 0.8,
+  wrist: 3.75,
+} as const;
 
-/** Progress 0..1 of a part that starts at `start` and lasts `dur`, at `time` seconds into the intro. */
+/** Cubic in-out, the one ease for drawing and for travel. */
+export const easeInOut = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+/** Cubic out, for something that arrives already moving (the shell coming round after the dial). */
+export const easeOut = (u: number) => 1 - Math.pow(1 - u, 3);
+
+/** Progress 0..1 of a part that starts at `start` and lasts `dur`, at `time` seconds on its clock. */
 export const introAt = (time: number, start: number, dur: number) => Math.min(1, Math.max(0, (time - start) / dur));
 
 /** Inline style for a CSS-animated part. Extra custom properties ride along. */

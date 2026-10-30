@@ -205,18 +205,19 @@ def passive(bag, f, ref):
     pads = sorted((p for p in f["pads"]), key=lambda p: p["n"])
     cx, cy, ang = pad_axis(pads)
     is_c = ref.startswith("C")
-    H = 0.50 if is_c else 0.36
+    k = 0.6 if "0201" in f["name"] else 1.0                        # an 0201 is 0.6 of an 0402 in every direction
+    H = (0.50 if is_c else 0.36) * k
     zc = Z_SEAT - 0.04 - H / 2
     ca, sa = cos(radians(ang)), sin(radians(ang))
 
     def at(u):
         return (cx + u * ca, cy + u * sa, zc)
 
-    rbox(bag["mlcc_body" if is_c else "res_top"], (0.60, 0.46 if is_c else 0.40, H * (1.0 if is_c else 0.9)), at(0), 0.04, 2, ang)
+    rbox(bag["mlcc_body"] if is_c else bag["res_top"], (0.60 * k, (0.46 if is_c else 0.40) * k, H * (1.0 if is_c else 0.9)), at(0), 0.04 * k, 2, ang)
     if not is_c:                                                   # alumina edges and the white back of a chip resistor
-        rbox(bag["alumina"], (0.62, 0.44, 0.05), (cx, cy, Z_SEAT - 0.04 - 0.025), 0.01, 1, ang)
+        rbox(bag["alumina"], (0.62 * k, 0.44 * k, 0.05), (cx, cy, Z_SEAT - 0.04 - 0.025), 0.01, 1, ang)
     for s in (-1, 1):
-        rbox(bag["tin_dull"], (0.20, 0.50 if is_c else 0.46, H), at(s * 0.40), 0.05, 2, ang)
+        rbox(bag["tin_dull"], (0.20 * k, (0.50 if is_c else 0.46) * k, H), at(s * 0.40 * k), 0.05 * k, 2, ang)
     for p in pads:
         fillet(bag, p, 0.17, 1.05)
 
@@ -401,7 +402,7 @@ def build_parts(M: dict) -> dict:
         n = f["name"]
         if ref in ("CP1", "CP2"):
             spring_contact(bag, f["pads"][0])
-        elif n.startswith(("C_0402", "R_0402")):
+        elif n.startswith(("C_0402", "R_0402", "R_0201")):
             passive(bag, f, ref)
         elif ref == "U2":
             sfh7072(bag, f)
