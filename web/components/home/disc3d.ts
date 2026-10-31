@@ -13,11 +13,9 @@
 // drawn once into an environment map, there are no shadow maps and no post-processing, and at rest it draws only when
 // something moves.
 import * as THREE from "three";
-import { Line2 } from "three/addons/lines/Line2.js";
-import { LineGeometry } from "three/addons/lines/LineGeometry.js";
-import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { Section } from "@/lib/i18n";
 import { DEG, GLASS, createRenderer, disposeScene, loadModel, pixelRatio, precompile, prepare, s0, spring, track, type Spring } from "../three/core";
+import { CASEBACK_Z, Ink, drawWatch } from "../three/sketch";
 import { CANVAS, R_CASE, U_MM, VIEW } from "./geometry";
 import { B, easeInOut, easeOut, introAt } from "./timeline";
 
@@ -38,14 +36,15 @@ const STACK: Record<string, { lift: number; step: number }> = {
   pad: { lift: 22.5, step: 5 },
 };
 const PARTS = Object.keys(STACK).length;
-/** Lifted off the lid ("How it's worn"), the pad stands this far from it. */
-const PAD_OFF = 8;
-/** "The app": rings of fine line go out from the rim in the plane of the disc, one after another, as if it were sending. */
-const WAVES = 3;
-const WAVE_PERIOD = 2.2; // seconds for one ring to go out and fade
-const WAVE_REACH = 16; // mm past the rim
-/** How fast each hover answers (angular frequency of its spring): the turn of "How it's worn" is slower. */
-const HOVER_RATE: Record<Section, number> = { wear: 4.5, open: 6, measure: 6, app: 6 };
+/**
+ * "How it's worn": the watch the intro turned into the disc comes back round it, drawn in lines, its caseback on the
+ * disc's pad, while the disc comes down to this share of its size so the watch fits inside the lines to the sections.
+ */
+const WORN_SCALE = 0.62;
+/** "The app": the disc turns a little towards its name, down on the right, while the readings go along the line to it. */
+const APP_TURN = { yaw: 14, tilt: 8 };
+/** How fast each hover answers (angular frequency of its spring): the drawing of "How it's worn" is slower. */
+const HOVER_RATE: Record<Section, number> = { wear: 3.6, open: 6, measure: 6, app: 6 };
 
 /**
  * Pose of the disc: yaw about the vertical and tilt about the horizontal, in degrees, and scale. Tilt -180 shows the skin
@@ -116,8 +115,9 @@ export class Disc3D {
   private towards: THREE.Vector3 | null = null;
   private leds: THREE.MeshStandardMaterial[] = [];
   private glass: THREE.MeshStandardMaterial[] = [];
-  private waves: Line2[] = [];
-  private waveTime = 0;
+  private ink = new Ink();
+  private watch: THREE.Group;
+  private css = { w: 1, h: 1 };
   private dirty = true;
   private wasRest = false;
   private size = "";
@@ -167,20 +167,14 @@ export class Disc3D {
       this.points.set(key, point);
     }
 
-    // the rings of "The app": one circle of radius 1 in the plane of the disc, half way up it, scaled as it goes out
-    const circle = new LineGeometry();
-    const pts: number[] = [];
-    for (let i = 0; i <= 128; i++) pts.push(Math.cos((i / 128) * 2 * Math.PI), 0, Math.sin((i / 128) * 2 * Math.PI));
-    circle.setPositions(pts);
-    for (let k = 0; k < WAVES; k++) {
-      const m = new LineMaterial({ color: 0xffffff, linewidth: 1, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
-      const ring = new Line2(circle, m);
-      ring.position.y = H / 2;
-      ring.renderOrder = 3;
-      ring.visible = false;
-      this.body.add(ring);
-      this.waves.push(ring);
-    }
+    // the watch of "How it's worn", in its own frame (dial towards +z) turned onto the disc's axis: its +z along the
+    // disc's +y, its caseback plate on the pad; hidden until the hover draws it
+    this.watch = drawWatch(this.ink, false);
+    this.watch.rotation.set(-90 * DEG, 0, 0);
+    this.watch.position.y = H - CASEBACK_Z;
+    this.watch.visible = false;
+    this.body.add(this.watch);
+    this.scene.add(this.ink.liveLines);
   }
 
   /** `most`: the pixel ratio to start at (see resize). The disc is drawn once at the canvas's size before it is returned. */
@@ -232,7 +226,7 @@ export class Disc3D {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    for (const ring of this.waves) (ring.material as LineMaterial).resolution.set(width, height);
+    this.css = { w: width, h: height };
     this.dirty = true;
   }
 
@@ -256,21 +250,13 @@ export class Disc3D {
     step(this.tiltX, aim.x, 4);
     step(this.tiltY, aim.y, 4);
     step(this.leave, this.towards ? 1 : 0, 7);
-    // the rings keep going out while "The app" is pointed at
-    if (this.hover.app.x > 0.001 && !still) {
-      this.waveTime += dt;
-      moving = true;
-    }
     if (!moving) return false;
 
     const h = Object.fromEntries(Object.entries(this.hover).map(([k, sp]) => [k, clamp01(sp.x)])) as Record<Section, number>;
-    // "How it's worn" turns the disc over to its watch side, then lifts the pad off it
-    const turn = smooth01(h.wear / 0.65);
-    const padOff = smooth01((h.wear - 0.45) / 0.55);
     const p = pose(b);
-    p.yaw += (OPENED.yaw - REST.yaw) * h.open + 18 * Math.sin(Math.PI * turn) + this.tiltX.x * 6;
-    p.tilt += (OPENED.tilt - REST.tilt) * h.open + 180 * turn + this.tiltY.x * 4;
-    p.scale *= 1 + (OPENED.scale / REST.scale - 1) * h.open;
+    p.yaw += (OPENED.yaw - REST.yaw) * h.open + APP_TURN.yaw * h.app + this.tiltX.x * 6;
+    p.tilt += (OPENED.tilt - REST.tilt) * h.open + APP_TURN.tilt * h.app + this.tiltY.x * 4;
+    p.scale *= (1 + (OPENED.scale / REST.scale - 1) * h.open) * (1 - (1 - WORN_SCALE) * smooth01(h.wear / 0.7));
 
     // the parts: apart in the exploded view, and what the hover does to them
     let sum = 0;
@@ -280,7 +266,6 @@ export class Disc3D {
       if (def) {
         lift = def.lift * Math.max(apart(b, def.step), OPENED_LIFT * h.open);
         sum += lift;
-        if (name === "pad") lift += PAD_OFF * padOff;
       }
       part.node.position.y = lift;
     }
@@ -295,15 +280,6 @@ export class Disc3D {
       m.emissive.copy(GREEN);
       m.emissiveIntensity = glow * 0.22;
     }
-    // "The app": each ring fades in as it leaves the rim and out as it goes, and they follow one another round
-    for (let k = 0; k < WAVES; k++) {
-      const u = (this.waveTime / WAVE_PERIOD + k / WAVES) % 1;
-      const o = h.app * Math.min(1, u / 0.08) * (1 - u) * (1 - u);
-      const ring = this.waves[k];
-      ring.visible = o > 0.004;
-      ring.scale.setScalar(R + 0.8 + WAVE_REACH * easeOut(u));
-      (ring.material as LineMaterial).opacity = 0.85 * o;
-    }
 
     // The middle of the stack stays in the middle of the drawing: the shell moves up as the parts behind it move away.
     this.body.position.y = -(H / 2 + sum / PARTS);
@@ -317,6 +293,14 @@ export class Disc3D {
     this.pivot.position.set(0, 0, 0);
     // the part ends up half way to the middle of the drawing: (1 - close / 2) where it was, at 1 + 0.45 close the size
     if (this.towards) this.pivot.position.copy(this.towards).multiplyScalar(-0.95 * close);
+    // "How it's worn": the watch draws itself round the disc while the disc comes down in size, and rubs out the other way
+    const drawn = smooth01((h.wear - 0.15) / 0.85);
+    this.watch.visible = this.ink.liveLines.visible = drawn > 0.002;
+    if (this.watch.visible) {
+      this.scene.updateMatrixWorld(true);
+      this.ink.set(drawn, this.css.w, this.css.h);
+      this.ink.update(this.camera.position);
+    }
     this.renderer.render(this.scene, this.camera);
     return true;
   }
@@ -333,6 +317,7 @@ export class Disc3D {
   }
 
   dispose() {
+    this.ink.dispose();
     disposeScene(this.scene, this.env, this.renderer);
   }
 

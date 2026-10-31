@@ -10,15 +10,13 @@
 // second spring, `f`: the disc comes off the caseback, out of the charger, out of its holder. Nothing moves on its own.
 import * as THREE from "three";
 import { DEG, createRenderer, disposeScene, loadModel, pixelRatio, precompile, prepareAll, s0, spring, track } from "../../three/core";
-import { Ink, Pen, TAU, X, Y, Z, solid, solidBox, solidCylinder, solidRing, solidStrip, v } from "./sketch";
+import { CASEBACK_Z, Ink, Pen, TAU, X, Y, Z, drawWatch, solid, solidBox, solidCylinder, solidRing, solidStrip, v } from "../../three/sketch";
 
 export type WearKind = "caseback" | "charge" | "band";
 type Track = (t: number) => number;
 type Pose = { yaw: Track; tilt: Track; zoom: Track };
 
 const FOV = 22;
-/** The disc in the watch's frame: its pad (y = 3.1 in its own frame) on the caseback plate, 4.4 mm behind the middle of the case. */
-const CASEBACK_Z = -4.4;
 const DISC_H = 3.1;
 /** The dish floor of the charger, where the skin face of the disc rests (generate_disc.py, P_FLOOR). */
 const DISH = 5.8;
@@ -60,6 +58,8 @@ export class WearScene {
   private size = { w: 1, h: 1 };
   private sized = "";
   private narrow = false;
+  /** Angular frequency of the spring that p follows: slow on a desktop, quicker on a phone, where less scroll plays it. */
+  private rate = 3.2;
   private dirty = true;
   private v = new THREE.Vector3();
 
@@ -110,6 +110,7 @@ export class WearScene {
     this.sized = key;
     this.size = { w, h };
     this.narrow = narrow;
+    this.rate = narrow ? 5 : 3.2;
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
@@ -130,7 +131,7 @@ export class WearScene {
       else spring(sp, to, dt, w);
       if (sp.x !== to || sp.v !== 0) moving = true;
     };
-    step(this.p, target, 3.2);
+    step(this.p, target, this.rate);
     const aim = this.aim && !still ? this.aim : { x: 0, y: 0 };
     step(this.tiltX, aim.x, 4);
     step(this.tiltY, aim.y, 4);
@@ -189,85 +190,6 @@ const smooth = (x: number) => {
   const s = Math.min(1, Math.max(0, x));
   return s * s * (3 - 2 * s);
 };
-
-// ------------------------------------------------------------------------------------------------------------ the watch
-/**
- * A watch of 44 mm in lines, in its own frame: dial towards +z, 12 o'clock towards +y, crown towards +x, the middle of the
- * case at z = 0 and the caseback plate, where the disc goes, at z = -4.4, with its straps.
- */
-function drawWatch(ink: Ink) {
-  const g = new THREE.Group();
-  const edge = new Pen();
-  const fine = new Pen();
-  const R = 22; // case
-  const BACK = -3.4; // back of the case, round the caseback plate
-  const TOP = 3.6; // top of the case side, under the bezel
-  const BEZEL = 4.6;
-  const PLATE = 16.5; // caseback plate
-  const at = (z: number) => v(0, 0, z);
-
-  edge.arc(at(BACK), X, Y, R).arc(at(TOP), X, Y, R).arc(at(BEZEL), X, Y, 20.8).arc(at(BEZEL), X, Y, 18.6);
-  edge.arc(at(CASEBACK_Z), X, Y, PLATE).arc(at(BACK), X, Y, PLATE);
-  fine.arc(at(BACK), X, Y, 18.6);
-  for (let k = 0; k < 4; k++) {
-    const a = (45 + 90 * k) * DEG;
-    fine.arc(v(20.3 * Math.cos(a), 20.3 * Math.sin(a), BACK), X, Y, 0.75);
-  }
-  ink.sides.push(
-    { node: g, c: at(0), axis: Z, u: X, r: R, h0: BACK, h1: TOP },
-    { node: g, c: at(0), axis: Z, u: X, r: 21.2, h0: TOP, h1: BEZEL },
-    { node: g, c: at(0), axis: Z, u: X, r: PLATE, h0: CASEBACK_Z, h1: BACK },
-  );
-  // the case is solid up to just under the crystal, and the bezel is a ring round it
-  solidCylinder(g, at(0), Z, R - 0.12, BACK + 0.1, TOP - 0.15);
-  solidRing(g, 18.75, 20.7, TOP - 0.15, BEZEL - 0.12).rotation.x = 90 * DEG;
-  solidCylinder(g, at(0), Z, PLATE - 0.12, CASEBACK_Z + 0.1, BACK + 0.1);
-
-  // crown at 3 o'clock
-  const crown = v(0, 0, 0.3);
-  edge.arc(v(25.2, 0, 0.3), Y, Z, 2.6).arc(v(22.6, 0, 0.3), Y, Z, 2.6);
-  ink.sides.push({ node: g, c: crown, axis: X, u: Y, r: 2.6, h0: 22.6, h1: 25.2 });
-  solidCylinder(g, crown, X, 2.45, 22.4, 25.1);
-
-  // lugs: a slab either side of each strap, its side curving down towards the strap
-  const LUG: [number, number][] = [[17.6, 3.1], [21, 2.95], [23.6, 2.45], [25.2, 1.7], [25.8, 0.6], [25.6, -0.8], [24.4, -1.7], [21, -2.3], [17.6, -2.6]];
-  const LUG_X = [10.9, 13.5];
-  for (const sx of [-1, 1]) {
-    for (const sy of [-1, 1]) {
-      for (const x of LUG_X) edge.stroke(LUG.map(([y, z]) => v(sx * x, sy * y, z)));
-      for (const i of [3, 5]) fine.line(v(sx * LUG_X[0], sy * LUG[i][0], LUG[i][1]), v(sx * LUG_X[1], sy * LUG[i][0], LUG[i][1]));
-      const shape = new THREE.Shape(LUG.map(([y, z]) => new THREE.Vector2(y, z)));
-      const geo = new THREE.ExtrudeGeometry(shape, { depth: LUG_X[1] - LUG_X[0] - 0.2, bevelEnabled: false, curveSegments: 4 });
-      geo.applyMatrix4(new THREE.Matrix4().set(0, 0, sx, sx * (LUG_X[0] + 0.1), sy, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));
-      solid(g, geo);
-    }
-  }
-
-  // straps: out from the spring bars between the lugs, then round towards the wrist, which is behind the caseback
-  const HALF = 10.4;
-  for (const sy of [-1, 1]) {
-    const pts: THREE.Vector3[] = [];
-    const n: THREE.Vector3[] = [];
-    for (let y = 22.6; y < 28.5; y += 1) {
-      pts.push(v(0, sy * y, 0.3));
-      n.push(v(0, 0, 1));
-    }
-    for (let a = 0; a <= 125; a += 4) {
-      const t = a * DEG;
-      pts.push(v(0, sy * (28.5 + 15 * Math.sin(t)), -14.7 + 15 * Math.cos(t)));
-      n.push(v(0, sy * Math.sin(t), Math.cos(t)));
-    }
-    for (const x of [-HALF, HALF]) edge.stroke(pts.map((p) => v(x, p.y, p.z)));
-    edge.line(v(-HALF, pts[0].y, pts[0].z), v(HALF, pts[0].y, pts[0].z));
-    const half = pts.map(() => HALF);
-    ink.strips.push({ node: g, pts, n, across: X, half });
-    solidStrip(g, pts, X, half.map((h) => h - 0.12));
-  }
-
-  ink.draw(g, edge, "edge");
-  ink.draw(g, fine, "fine");
-  return g;
-}
 
 // ---------------------------------------------------------------------------------------------------------- the charger
 /**
@@ -464,7 +386,7 @@ function drawBand(ink: Ink) {
 function caseback(disc: THREE.Object3D): Built {
   const rig = new THREE.Group();
   const ink = new Ink();
-  const watch = drawWatch(ink);
+  const watch = drawWatch(ink, true);
   const holder = new THREE.Group();
   holder.add(disc);
   holder.rotation.x = 90 * DEG; // the disc's +y, towards the watch, along the watch's +z, towards the dial

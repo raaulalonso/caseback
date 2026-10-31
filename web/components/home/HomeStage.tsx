@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { METRICS } from "@/lib/blobs/sim";
 import type { Dict, Locale, Section } from "@/lib/i18n";
 import type { Disc3D } from "./disc3d";
 import { Front, SideView } from "./Drawing";
@@ -22,6 +23,22 @@ const WAIT = 8;
 /** Highest pixel ratio of the 3D canvas while a phone plays the intro; at rest it draws at 2. */
 const INTRO_RATIO = 1.5;
 const BOX = `${-VIEW} ${-VIEW} ${2 * VIEW} ${2 * VIEW}`;
+const APP = CALLOUTS.findIndex((c) => c.key === "app");
+/** "The app": each reading takes this long along the line, and the next one leaves this long after it (seconds). */
+const READING = { travel: 1.9, gap: 0.32 };
+
+/** The marks of the app's seven readings (lib/blobs/field.ts, MarkKind), about twelve drawing units across. */
+function Reading({ kind, color }: { kind: number; color: string }) {
+  switch (kind) {
+    case 1: return <path d="M0 -5.2L5.2 0L0 5.2L-5.2 0Z" fill={color} />;
+    case 2: return <rect x={-4} y={-4} width={8} height={8} rx={0.8} fill={color} />;
+    case 3: return <path d="M0 -5L4.8 3.6L-4.8 3.6Z" fill={color} />;
+    case 4: return <circle r={3.6} fill="none" stroke={color} strokeWidth={1.6} />;
+    case 5: return <path d="M0 5L4.8 -3.6L-4.8 -3.6Z" fill={color} />;
+    case 6: return <rect x={-1.6} y={-5.2} width={3.2} height={10.4} rx={0.6} fill={color} />;
+    default: return <circle r={4.2} fill={color} />;
+  }
+}
 
 type Run = "pending" | "intro" | "build" | "done";
 
@@ -34,6 +51,10 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
   const lineRefs = useRef<(SVGPolylineElement | null)[]>([]);
   const nodeRefs = useRef<(SVGCircleElement | null)[]>([]);
   const skipRef = useRef<() => void>(() => {});
+  const readingRefs = useRef<(SVGGElement | null)[]>([]);
+  const hoverRef = useRef<number | null>(null);
+  // a tap on a phone is not a hover: the last pointer that went down was a finger or a pen
+  const touchRef = useRef(false);
   const [run, setRun] = useState<Run>("pending");
   const [ready, setReady] = useState(false);
   const [fallback, setFallback] = useState(false);
@@ -43,6 +64,7 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
   const [hands, setHands] = useState({ h: 305, m: 60, s: 180 });
 
   useEffect(() => {
+    hoverRef.current = hover;
     discRef.current?.setHover(hover === null ? null : CALLOUTS[hover].key);
   }, [hover]);
 
@@ -124,14 +146,45 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
     io.observe(canvas);
 
     // Leaders leave from the parts wherever the 3D scene has put them.
+    let appLine = leaderPoints(CALLOUTS[APP]);
     const follow = (d: Disc3D) => {
       const a = d.anchors();
+      appLine = leaderPoints(CALLOUTS[APP], a.app);
       CALLOUTS.forEach((c, i) => {
         const pts = leaderPoints(c, a[c.key]).map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
         lineRefs.current[2 * i]?.setAttribute("points", pts);
         lineRefs.current[2 * i + 1]?.setAttribute("points", pts);
         nodeRefs.current[i]?.setAttribute("cx", a[c.key][0].toFixed(1));
         nodeRefs.current[i]?.setAttribute("cy", a[c.key][1].toFixed(1));
+      });
+    };
+
+    // "The app": while it is pointed at, the seven readings go along its line from the disc to its name, one after another,
+    // each in its mark and colour, setting off and arriving gently; the stream fades in and out with the hover
+    let flowTime = 0;
+    let flowFade = 0;
+    const stream = (dt: number) => {
+      const on = hoverRef.current === APP && settled && !reduced;
+      if (!on && flowFade === 0) return;
+      flowFade = on ? Math.min(1, flowFade + dt / 0.25) : Math.max(0, flowFade - dt / 0.35);
+      flowTime = flowFade === 0 ? 0 : flowTime + dt;
+      const [p0, p1, p2] = appLine;
+      const l1 = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+      const l2 = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      const cycle = METRICS.length * READING.gap;
+      METRICS.forEach((_, k) => {
+        const el = readingRefs.current[k];
+        if (!el) return;
+        const since = flowTime - k * READING.gap;
+        const u = since < 0 ? -1 : (since % cycle) / READING.travel;
+        if (u < 0 || u > 1) {
+          el.style.opacity = "0";
+          return;
+        }
+        const d = (l1 + l2) * u * u * (3 - 2 * u);
+        const [a, b, f] = d < l1 ? [p0, p1, d / l1] : [p1, p2, (d - l1) / l2];
+        el.setAttribute("transform", `translate(${(a[0] + (b[0] - a[0]) * f).toFixed(1)} ${(a[1] + (b[1] - a[1]) * f).toFixed(1)})`);
+        el.style.opacity = (flowFade * Math.min(1, u / 0.1) * Math.min(1, (1 - u) / 0.12)).toFixed(3);
       });
     };
 
@@ -188,6 +241,7 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
           setReady(true);
         }
       }
+      stream(dt);
       raf = requestAnimationFrame(frame);
     };
 
@@ -201,7 +255,11 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
     };
     const onLeave = () => disc?.setPointer(null);
     const onKey = (e: KeyboardEvent) => {
+      touchRef.current = false;
       if (!settled && e.key === "Escape") skipRef.current();
+    };
+    const onDown = (e: PointerEvent) => {
+      touchRef.current = e.pointerType !== "mouse";
     };
     const onVisibility = () => {
       if (document.hidden) {
@@ -217,6 +275,7 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
     window.addEventListener("pointermove", onMove);
     document.documentElement.addEventListener("pointerleave", onLeave);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onDown, true);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       disposed = true;
@@ -228,6 +287,7 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
       window.removeEventListener("pointermove", onMove);
       document.documentElement.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onDown, true);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
@@ -276,6 +336,15 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
               );
             })}
           </g>
+          <g className="readings" aria-hidden>
+            {METRICS.map((m, k) => (
+              <g key={m.key} ref={(el) => { readingRefs.current[k] = el; }} style={{ opacity: 0 }}>
+                <g transform="scale(1.2)">
+                  <Reading kind={m.kind} color={m.color} />
+                </g>
+              </g>
+            ))}
+          </g>
         </svg>
       </div>
 
@@ -294,9 +363,9 @@ export function HomeStage({ lang, t }: { lang: Locale; t: Dict }) {
                 <Link
                   href={href}
                   onClick={(e) => open(e, href, c.key)}
-                  onPointerEnter={() => setHover(i)}
+                  onPointerEnter={(e) => e.pointerType === "mouse" && setHover(i)}
                   onPointerLeave={() => setHover(null)}
-                  onFocus={() => setHover(i)}
+                  onFocus={() => !touchRef.current && setHover(i)}
                   onBlur={() => setHover(null)}
                 >
                   <span className="num" aria-hidden>{i + 1}</span>

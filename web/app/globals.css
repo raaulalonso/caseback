@@ -118,7 +118,7 @@ button { background: none; border: 0; cursor: pointer; }
 .leader.on .leader-hot { stroke-dashoffset: 0; }
 .node { fill: var(--ink-1); stroke: #000; stroke-width: calc(2px * var(--px, 1)); transform-box: fill-box; transform-origin: center; transition: fill 0.24s var(--ease), transform 0.3s var(--ease-draw); }
 .leader.on .node { fill: var(--lume); transform: scale(1.5); }
-/* "How it's worn" turns the disc over, so the parts the other lines point at are behind it for as long as it lasts */
+/* "How it's worn" draws a watch round the disc, and the other lines would cross it */
 .leader { transition: opacity 0.4s var(--ease); }
 .home[data-hover="wear"] .leader:not(.on) { opacity: 0.25; }
 
@@ -131,7 +131,8 @@ button { background: none; border: 0; cursor: pointer; }
 .callout-r a { left: 12px; }
 .callout .num { display: none; }
 .callout .label { font-size: 16px; font-weight: 500; line-height: 1.2; transition: color 0.24s var(--ease); }
-.callout a:hover .label, .callout a:focus-visible .label { color: var(--lume); }
+.callout a:focus-visible .label { color: var(--lume); }
+@media (hover: hover) { .callout a:hover .label { color: var(--lume); } } /* a tap on a phone does not leave it lit */
 
 /* side view */
 .side { position: absolute; right: var(--pad); top: calc(50% + 58px); transform: translateY(-50%); width: clamp(250px, calc(50vw - 340 * var(--u) - 60px), 400px); }

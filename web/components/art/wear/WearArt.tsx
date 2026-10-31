@@ -2,10 +2,11 @@
 
 // A plate of "How it's worn" (./scenes.ts: the 3D disc in a drawing) with lines from its parts to their names, as on the
 // home page. The scene plays as the plate comes up the screen: its progress is how far the middle of the figure has risen,
-// from a fifth of a screen below the bottom to 60 % of the height (or the end of the page), so scrolling back plays it
-// backwards. Three.js and the model load when the figure is near; the canvas draws only while it is on screen and
-// something moves. Pointing at a name (or tapping it) lights its line and moves its part. A narrow figure (a phone) is
-// square, with the drawing smaller and the names smaller in a narrower column; without WebGL the names are all that shows.
+// from a fifth of a screen below the bottom to 60 % of the height or the end of the page (on a phone, from the top of the
+// figure coming in to most of it being in sight), so scrolling back plays it backwards. Three.js and the model load when
+// the figure is near; the canvas draws only while it is on screen and something moves. Pointing at a name (or tapping it)
+// lights its line and moves its part. A narrow figure (a phone) is square, with the drawing smaller and the names smaller
+// in a narrower column; without WebGL the names are all that shows.
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { WearKind, WearScene } from "./scenes";
 
@@ -80,7 +81,9 @@ export function WearArt({ kind, labels, label }: { kind: WearKind; labels: WearL
         const centre = r.top + r.height / 2;
         // the last plate may not get that far up before the page ends: once the page is at its end, a plate in sight is done
         const end = window.scrollY + vh >= document.documentElement.scrollHeight - 2 && r.top < vh;
-        const target = reduced || end ? 1 : Math.min(1, Math.max(0, (1.2 * vh - centre) / (0.6 * vh)));
+        // a phone: done once most of the figure is in sight, since there it is in sight long before its middle is high up
+        const share = dims.narrow ? (vh - r.top) / (0.85 * r.height) : (1.2 * vh - centre) / (0.6 * vh);
+        const target = reduced || end ? 1 : Math.min(1, Math.max(0, share));
         if (scene.frame(target, dt, reduced)) draw();
       }
       raf = visible ? requestAnimationFrame(loop) : 0;
