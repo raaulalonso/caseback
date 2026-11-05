@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.20.0)
+list(APPEND BOARD_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+list(APPEND DTS_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+project(caseback_fw)
+target_sources(app PRIVATE src/main.c src/device.c src/protocol.c)
+target_include_directories(app PRIVATE include)
+
+if(CONFIG_BOARD_CASEBACK_DISC)
+  target_sources(app PRIVATE src/disc.c src/bench_data.c src/history.c src/disc_history.c src/factory.c src/factory_state.c)
+  target_sources_ifdef(CONFIG_CASEBACK_OPTICAL_PROFILE app PRIVATE src/optical_profile.c src/optical_stats.c src/optical_engine.c)
+endif()

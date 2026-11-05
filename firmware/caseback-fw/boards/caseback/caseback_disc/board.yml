@@ -1,0 +1,6 @@
+board:
+  name: caseback_disc
+  full_name: Caseback Gen 1 disc
+  vendor: others
+  socs:
+    - name: nrf52840

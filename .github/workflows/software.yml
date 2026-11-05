@@ -1,0 +1,61 @@
+name: Software
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  protocol-and-firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test Python protocol and reproduce golden vectors
+        working-directory: caseback-protocol/python
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest
+          python tools/gen_fixtures.py
+          git diff --exit-code -- ../fixtures ../../apps/ios/CasebackProtocol/Tests
+          test -z "$(git ls-files --others --exclude-standard -- ../fixtures ../../apps/ios/CasebackProtocol/Tests)"
+          diff -r ../fixtures/golden ../../apps/ios/CasebackProtocol/Tests/CasebackProtocolTests/Fixtures/golden
+      - name: Test portable firmware logic with sanitizers
+        working-directory: firmware/caseback-fw
+        run: |
+          flags=(-std=c11 -pedantic -Wall -Wextra -Werror -Iinclude -fsanitize=address,undefined -fno-sanitize-recover=all)
+          cc "${flags[@]}" tests/test_protocol.c src/protocol.c -o "$RUNNER_TEMP/test_protocol"
+          "$RUNNER_TEMP/test_protocol" ../../caseback-protocol/fixtures/golden
+          cc "${flags[@]}" tests/test_device.c src/device.c src/protocol.c -o "$RUNNER_TEMP/test_device"
+          "$RUNNER_TEMP/test_device"
+          for unit in bench_data history optical_profile factory; do
+            case "$unit" in
+              bench_data) sources=(src/bench_data.c) ;;
+              history) sources=(src/history.c src/protocol.c) ;;
+              optical_profile) sources=(src/optical_engine.c src/optical_stats.c) ;;
+              factory) sources=(src/factory_state.c src/protocol.c) ;;
+            esac
+            cc "${flags[@]}" "tests/test_$unit.c" "${sources[@]}" -o "$RUNNER_TEMP/test_$unit"
+            "$RUNNER_TEMP/test_$unit"
+          done
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test Swift protocol
+        run: swift test --package-path apps/ios/CasebackProtocol
+      - name: Build app, widgets and tests for the simulator
+        working-directory: apps/ios
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+          xcodebuild -scheme Caseback -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build-for-testing
+          xcodebuild -scheme CasebackBench -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -scheme CasebackDemo -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

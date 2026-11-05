@@ -1,0 +1,75 @@
+/dts-v1/;
+#include <nordic/nrf52840_qiaa.dtsi>
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/adc/nrf-saadc.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+
+/ {
+	chosen {
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
+	};
+	model = "Caseback disc";
+	compatible = "caseback,disc";
+	aliases { watchdog0 = &wdt0; };
+	zephyr,user {
+		imu-int-gpios = <&gpio0 8 GPIO_ACTIVE_HIGH>;
+		afe-int-gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+		charge-gpios = <&gpio0 26 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		fault-gpios = <&gpio0 30 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+		dock-gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
+		io-channels = <&adc 0>;
+	};
+};
+&pinctrl {
+	i2c_run: i2c_run { group1 { psels = <NRF_PSEL(TWIM_SCL,0,6)>, <NRF_PSEL(TWIM_SDA,0,5)>; }; };
+	i2c_sleep: i2c_sleep { group1 { psels = <NRF_PSEL(TWIM_SCL,0,6)>, <NRF_PSEL(TWIM_SDA,0,5)>; low-power-enable; }; };
+	spi_run: spi_run { group1 { psels = <NRF_PSEL(SPIM_SCK,0,19)>, <NRF_PSEL(SPIM_MOSI,0,15)>, <NRF_PSEL(SPIM_MISO,0,11)>; }; };
+	spi_sleep: spi_sleep { group1 { psels = <NRF_PSEL(SPIM_SCK,0,19)>, <NRF_PSEL(SPIM_MOSI,0,15)>, <NRF_PSEL(SPIM_MISO,0,11)>; low-power-enable; }; };
+};
+&gpio0 { status = "okay"; };
+&gpiote { status = "okay"; };
+&wdt0 { status = "okay"; };
+&reg0 { status = "okay"; };
+&reg1 { regulator-initial-mode = <NRF5X_REG_MODE_DCDC>; };
+disc_i2c: &i2c0 {
+	compatible = "nordic,nrf-twim";
+	status = "okay";
+	pinctrl-0 = <&i2c_run>; pinctrl-1 = <&i2c_sleep>; pinctrl-names = "default", "sleep";
+	clock-frequency = <100000>;
+	/* BMI270 init: register address followed by up to 256 configuration bytes. */
+	zephyr,concat-buf-size = <257>;
+	zephyr,flash-buf-max-size = <257>;
+	imu: bmi270@68 { compatible = "bosch,bmi270"; reg = <0x68>; };
+};
+&spi1 {
+	compatible = "nordic,nrf-spim";
+	status = "okay";
+	pinctrl-0 = <&spi_run>; pinctrl-1 = <&spi_sleep>; pinctrl-names = "default", "sleep";
+	cs-gpios = <&gpio0 23 GPIO_ACTIVE_LOW>;
+	max86140: ppg@0 { compatible = "adi,max86141"; reg = <0>; spi-max-frequency = <1000000>; };
+};
+&adc {
+	status = "okay";
+	#address-cells = <1>; #size-cells = <0>;
+	channel@0 {
+		reg = <0>; zephyr,gain = "ADC_GAIN_1_4"; zephyr,reference = "ADC_REF_INTERNAL";
+		zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS,40)>;
+		zephyr,input-positive = <NRF_SAADC_AIN1>; zephyr,resolution = <12>;
+	};
+};
+
+
+&flash0 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		boot_partition: partition@0 { label = "mcuboot"; reg = <0x0 0xc000>; };
+		slot0_partition: partition@c000 { label = "image-0"; reg = <0xc000 0x66000>; };
+		slot1_partition: partition@72000 { label = "image-1"; reg = <0x72000 0x66000>; };
+		history_partition: partition@d8000 { label = "history"; reg = <0xd8000 0x20000>; };
+		storage_partition: partition@f8000 { label = "storage"; reg = <0xf8000 0x8000>; };
+	};
+};

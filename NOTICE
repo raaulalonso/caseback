@@ -1,0 +1,19 @@
+Caseback
+Copyright the Caseback contributors.
+
+The firmware, Bluetooth protocol and application software in this snapshot are made
+available by their rights holders under the Apache License, Version 2.0 (LICENSE).
+This grant covers the Caseback-owned code in this distribution. Existing recipients
+of earlier versions retain the rights granted by the licences on those versions.
+
+IBM Plex Mono Light, Medium and Regular are font software by IBM Corp.
+Copyright 2017 IBM Corp. with Reserved Font Name "Plex".
+They are distributed under the SIL Open Font License 1.1. The original notice and
+licence travel with the fonts in apps/ios/Caseback/Resources/Fonts/OFL-IBMPlexMono.txt.
+Source: https://github.com/google/fonts/tree/main/ofl/ibmplexmono
+
+Zephyr, the Nordic HAL, the Bosch BMI270 driver/configuration, Arduino libraries,
+Apple frameworks and build tools are external dependencies with their own terms.
+No prebuilt firmware images or third-party SDKs are distributed here.
+
+Caseback is the project name. Apache-2.0 section 6 governs use of trademarks.
